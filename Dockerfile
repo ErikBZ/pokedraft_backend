@@ -4,8 +4,8 @@ COPY . .
 RUN cargo install --path .
 
 
-FROM debian:buster-slim as runner
-COPY --from=builder /usr/local/cargo/bin/rust-rocket-app /usr/local/bin/rust-rocket-app
+FROM debian:bookworm-slim as runner
+COPY --from=builder /usr/local/cargo/bin/pokedraft-backend /usr/local/bin/pokedraft-backend
 ENV ROCKET_ADDRESS=0.0.0.0
 EXPOSE 8000
-CMD ["rust-rocket-app"]
+CMD ["pokedraft-backend"]

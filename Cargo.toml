@@ -1,5 +1,5 @@
 [package]
-name = "pokedraft_backend"
+name = "pokedraft-backend"
 version = "0.1.0"
 edition = "2021"
 
