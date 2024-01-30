@@ -4,21 +4,10 @@ use surrealdb::engine::remote::ws::Client;
 use surrealdb::Surreal;
 use crate::models::pokemon::Pokemon;
 
-// TODO Refactor to work with `select` function
 #[get("/pokemon/get/<id>")]
-pub async fn get_pokemon(id: i8, db: &State<Surreal<Client>>) -> Option<Json<Pokemon>> {
-    let pokemon: Option<Pokemon> = match db
-            .query("Select * FROM pokemon WHERE dex_id = $dex_id")
-            .bind(("dex_id", id)).await {
-        Ok(mut r) => {
-            match r.take(0) {
-                Ok(p) => p,
-                Err(e) => {
-                    println!("{}", e);
-                    return None
-                }
-            }
-        }
+pub async fn get_pokemon(id: u32, db: &State<Surreal<Client>>) -> Option<Json<Pokemon>> {
+    let pokemon: Option<Pokemon> = match db.select(("pokemon", u64::from(id))).await {
+        Ok(p) => p,
         Err(e) => {
             println!("{}", e);
             return None
