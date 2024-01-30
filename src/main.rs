@@ -1,65 +1,21 @@
 #[macro_use] extern crate rocket;
 use std::string;
 
+use rocket::response::status::Created;
 use serde::{Deserialize, Serialize};
 use surrealdb::engine::remote::ws::{self, Ws, Client};
 use surrealdb::opt::auth::Root;
 use surrealdb::sql::Thing;
 use surrealdb::{Error, Surreal};
 use rocket::{State};
-
-#[derive(Debug, Serialize)]
-enum PokemonType {
-    NORMAL,
-    FIRE,
-    WATER,
-    ELECTRIC,
-    GRASS,
-    ICE,
-    FIGHTING,
-    POISON,
-    GROUND,
-    FLYING,
-    PSYCHIC,
-    BUG,
-    ROCK,
-    GHOST,
-    DRAGON,
-    DARK,
-    STEEL,
-    FAIRY,
-}
-
-#[derive(Debug, Serialize)]
-struct Pokemon <'a>{
-    name: &'a str,
-    type1: PokemonType,
-    type2: PokemonType,
-    evolves_from: &'a str,
-    gen: u8,
-    is_legendary: bool,
-    is_mythic: bool,
-}
+mod models;
+use models::pokemon::{Pokemon, PokemonType};
+mod api;
+use api::endpoints;
 
 #[derive(Debug, Deserialize)]
 struct Record {
     id: Thing
-}
-
-
-#[get("/")]
-async fn index(db: &State<Surreal<Client>>) -> &'static str {
-    let created: Result<Vec<Record>, Error> = db.create("pokemon").content( Pokemon {
-        name: "Bulbasaur",
-        type1: PokemonType::GRASS,
-        type2: PokemonType::POISON,
-        evolves_from: "0",
-        gen: 1,
-        is_legendary: false,
-        is_mythic: false
-    }).await;
-
-    "Hello, world!"
 }
 
 async fn init_db() -> Surreal<Client> {
@@ -85,8 +41,29 @@ async fn init_db() -> Surreal<Client> {
 async fn rocket() -> _ {
     let db = init_db().await;
 
+    let created: Result<Vec<Record>, Error> = db.create("pokemon").content( Pokemon {
+        dex_id: 1,
+        name: "Bulbasaur".into(),
+        type1: PokemonType::GRASS,
+        type2: PokemonType::POISON,
+        evolves_from: "0".into(),
+        gen: 1,
+        is_legendary: false,
+        is_mythic: false
+    }).await;
+
+    match created {
+        Ok(p) => {
+            for x in &p {
+                println!("{}", x.id)
+            }
+        },
+        Err(_) => {},
+    }
+
     // Connect to the server
     rocket::build()
         .manage(db)
-        .mount("/", routes![index])
+        .mount("/api/v1", routes![endpoints::get_pokemon])
+        .mount("/api/v1", routes![endpoints::list_pokemon])
 }
