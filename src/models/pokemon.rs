@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,33 +21,23 @@ pub enum PokemonType {
     DARK,
     STEEL,
     FAIRY,
+    NONE,
 }
 
 // probably a better way than to make these all public
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Pokemon{
-    pub dex_id: u8,
+    pub dex_id: u16,
     pub name: String,
     pub type1: PokemonType,
-    pub type2: PokemonType,
-    pub evolves_from: String,
+    pub type2: Option<PokemonType>,
+    pub evolves_from: u16,
     pub gen: u8,
     pub is_legendary: bool,
     pub is_mythic: bool,
 }
 
 impl Pokemon {
-    pub fn from_id(id: i8) -> Pokemon{
-        Pokemon {
-            dex_id: 1,
-            name: "Bulbasaur".into(),
-            type1: PokemonType::GRASS,
-            type2: PokemonType::POISON,
-            evolves_from: "0".into(),
-            gen: 1,
-            is_legendary: false,
-            is_mythic: false
-        }
-    }
+
 }

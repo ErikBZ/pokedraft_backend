@@ -1,24 +1,27 @@
 use rocket::{State};
 use rocket::serde::json::Json;
-use surrealdb::engine::remote::ws::{self, Ws, Client};
+use surrealdb::engine::remote::ws::Client;
 use surrealdb::Surreal;
 use crate::models::pokemon::Pokemon;
 
+// TODO Refactor to work with `select` function
 #[get("/pokemon/get/<id>")]
 pub async fn get_pokemon(id: i8, db: &State<Surreal<Client>>) -> Option<Json<Pokemon>> {
-    let pokemon: Option<Pokemon> = match db.query("Select * FROM pokemon WHERE dex_id = $dex_id").bind(("dex_id", 1)).await {
+    let pokemon: Option<Pokemon> = match db
+            .query("Select * FROM pokemon WHERE dex_id = $dex_id")
+            .bind(("dex_id", id)).await {
         Ok(mut r) => {
             match r.take(0) {
                 Ok(p) => p,
                 Err(e) => {
                     println!("{}", e);
-                    None
+                    return None
                 }
             }
         }
         Err(e) => {
             println!("{}", e);
-            None
+            return None
         }
     };
 
