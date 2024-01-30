@@ -5,8 +5,8 @@ use surrealdb::Surreal;
 use crate::models::pokemon::Pokemon;
 
 #[get("/pokemon/get/<id>")]
-pub async fn get_pokemon(id: u32, db: &State<Surreal<Client>>) -> Option<Json<Pokemon>> {
-    let pokemon: Option<Pokemon> = match db.select(("pokemon", u64::from(id))).await {
+pub async fn get_pokemon(id: u64, db: &State<Surreal<Client>>) -> Option<Json<Pokemon>> {
+    let pokemon: Option<Pokemon> = match db.select(("pokemon", id)).await {
         Ok(p) => p,
         Err(e) => {
             println!("{}", e);
