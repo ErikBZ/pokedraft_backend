@@ -27,7 +27,7 @@ pub enum PokemonType {
 // probably a better way than to make these all public
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
-pub struct Pokemon{
+pub struct Pokemon {
     pub dex_id: u16,
     pub name: String,
     pub type1: PokemonType,
@@ -38,6 +38,18 @@ pub struct Pokemon{
     pub is_mythic: bool,
 }
 
-impl Pokemon {
+// TODO figure out how to do a many to many relationship
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct PokemonDraftSet {
+    uuid: String,
+    name: String,
+    pokemon: Vec<PokemonResponse>,
+}
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(crate = "rocket::serde")]
+enum PokemonResponse {
+    DexId(u32),
+    Stats(Pokemon)
 }

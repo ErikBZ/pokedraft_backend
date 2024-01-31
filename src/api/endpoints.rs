@@ -1,4 +1,4 @@
-use rocket::{State};
+use rocket::State;
 use rocket::serde::json::Json;
 use surrealdb::engine::remote::ws::Client;
 use surrealdb::Surreal;

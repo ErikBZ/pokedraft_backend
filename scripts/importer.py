@@ -34,6 +34,10 @@ async def save_pokemon_to_db(db, pokemon):
             } 
         )
 
+async def create_pokemon_lists(db):
+    db.create("pokemon_draft_set", {"name": "Pokemon Gen 1"})
+    return ""
+
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
