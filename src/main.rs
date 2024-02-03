@@ -1,4 +1,5 @@
 #[macro_use] extern crate rocket;
+extern crate surrealdb;
 use surrealdb::engine::remote::ws::{Ws, Client};
 use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
@@ -34,4 +35,6 @@ async fn rocket() -> _ {
         .manage(db)
         .mount("/api/v1", routes![endpoints::get_pokemon])
         .mount("/api/v1", routes![endpoints::list_pokemon])
+        .mount("/api/v1", routes![endpoints::list_pokemon_draft_set])
+        .mount("/api/v1", routes![endpoints::get_pokemon_draft_set])
 }

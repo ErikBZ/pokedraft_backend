@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use surrealdb::sql::Thing;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[warn(dead_code)]
@@ -38,18 +39,19 @@ pub struct Pokemon {
     pub is_mythic: bool,
 }
 
-// TODO figure out how to do a many to many relationship
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct PokemonDraftSet {
-    uuid: String,
+    id: Option<Thing>,
     name: String,
-    pokemon: Vec<PokemonResponse>,
+    // TODO figure out better way to do this
+    pokemon: Option<Vec<Pokemon>>,
+    pokemon_ids: Option<Vec<u32>>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
 enum PokemonResponse {
     DexId(u32),
-    Stats(Pokemon)
+    Stats(Pokemon),
 }

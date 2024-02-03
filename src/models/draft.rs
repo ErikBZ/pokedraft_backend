@@ -4,13 +4,12 @@ use serde::{Deserialize, Serialize};
 #[warn(dead_code)]
 pub enum DraftPhase {
     PICK,
-    BAN
+    BAN,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[warn(dead_code)]
 pub enum TurnType {
     ROUNDROBIN,
-    SNAKE
+    SNAKE,
 }
-

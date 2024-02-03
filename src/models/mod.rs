@@ -1,2 +1,2 @@
-pub mod pokemon;
 pub mod draft;
+pub mod pokemon;
