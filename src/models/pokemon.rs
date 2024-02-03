@@ -44,14 +44,12 @@ pub struct Pokemon {
 pub struct PokemonDraftSet {
     id: Option<Thing>,
     name: String,
-    // TODO figure out better way to do this
-    pokemon: Option<Vec<Pokemon>>,
-    pokemon_ids: Option<Vec<u32>>
+    pokemon: Option<PokemonResponse>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
 enum PokemonResponse {
-    DexId(u32),
-    Stats(Pokemon),
+    Ids(Vec<u32>),
+    Stats(Vec<Pokemon>),
 }
