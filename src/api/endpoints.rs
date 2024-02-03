@@ -54,9 +54,9 @@ pub async fn get_pokemon_draft_set(
     db: &State<Surreal<Client>>,
 ) -> Option<Json<PokemonDraftSet>> {
     let query: String = if !detailed {
-        format!("SELECT name,id,->contains.out.dex_id as pokemon_ids FROM pokemon_draft_set:{id};")
+        format!("SELECT name,id,->contains.out.dex_id as pokemon.Ids FROM pokemon_draft_set:{id};")
     } else {
-        format!("SELECT name,id,->contains.out.* as pokemon FROM pokemon_draft_set:{id};")
+        format!("SELECT name,id,->contains.out.* as pokemon.Stats FROM pokemon_draft_set:{id};")
     };
 
     match run_query(query, db).await {
@@ -65,7 +65,6 @@ pub async fn get_pokemon_draft_set(
     }
 }
 
-// TODO actually do something useful with those errors
 async fn run_query<T>(query: String, db: &State<Surreal<Client>>) -> Option<T>
 where
     for<'a> T: Deserialize<'a>,
