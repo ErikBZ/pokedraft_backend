@@ -13,8 +13,12 @@ async def main():
 
         # clear table first
         await db.delete("pokemon")
-
         await save_pokemon_to_db(db, raw_pokemon)
+
+        await db.delete("pokemon_draft_set")
+        await db.delete("contains")
+        #await db.query("DEFINE INDEX unqiue_pokemon_in_list ON TABLE contains COLUMNS in, out, UNIQUE")
+        await create_pokemon_lists(db)
 
 async def save_pokemon_to_db(db, pokemon):
     for pk in pokemon:
@@ -34,9 +38,58 @@ async def save_pokemon_to_db(db, pokemon):
             } 
         )
 
+def pokemon_select(before_gen=None, is_legendary=None, is_mythic=None, base_evolution=False):
+    sql = "SELECT id FROM pokemon"
+    filters = []
+    if before_gen != None:
+        filters.append(f"gen <= {before_gen}")
+    if is_legendary != None:
+        filters.append(f"is_legendary = {is_legendary}")
+    if is_mythic != None:
+        filters.append(f"is_mythic = {is_mythic}")
+    if base_evolution:
+        filters.append(f"evolves_from = 0")
+
+    if len(filters) != 0:
+        sql += " WHERE " + " and ".join(filters)
+
+    return sql
+
+async def create_list(db, gen, filters):
+    suffix, is_legendary, is_mythic, base_form = filters
+    set_name = f"Pokemon Gen {gen} {suffix}"
+    result = await db.create("pokemon_draft_set", {"name": set_name})
+    sub_sql = pokemon_select(gen, is_legendary, is_mythic, base_form)
+    if len(result) == 1:
+        print(f"Creating Set: {set_name}")
+        await db.query(f"RELATE {result[0]['id']}->contains->({sub_sql})")
+    else:
+        print(f"Result was not a single item, but expected only 1: {result}")
+
 async def create_pokemon_lists(db):
-    db.create("pokemon_draft_set", {"name": "Pokemon Gen 1"})
-    return ""
+    pokemon_ds_filters = [
+        ("Full Roster", None, None, False),
+        ("Base Only", None, None, True),
+        ("No Legends", False, False, False),
+        ("No Legends and Base Only", False, False, True),
+    ]
+
+    for f in pokemon_ds_filters:
+        for gen in range(1,10):
+            await create_list(db, gen, f)
+
+    for f in pokemon_ds_filters:
+        result = await db.create("pokemon_draft_set", {"name": f"Pokemon All Gens {f[0]}"})
+        sub_sql = pokemon_select()
+        if len(result) == 1:
+            print(f"Creating Set: Pokemon All Gens")
+            await db.query(f"RELATE {result[0]['id']}->contains->({sub_sql})")
+        else:
+            print(f"Result was not a single item, but expected only 1: {result}")
+
+    debug_sql = "SELECT id FROM pokemon WHERE dex_id < 10"
+    result = await db.create("pokemon_draft_set", {"name": f"Debug Set"})
+    await db.query(f"RELATE {result[0]['id']}->contains->({debug_sql})")
 
 if __name__ == "__main__":
     import asyncio
