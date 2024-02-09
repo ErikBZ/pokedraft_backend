@@ -49,7 +49,7 @@ pub struct PokemonDraftSet {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
-enum PokemonResponse {
+pub enum PokemonResponse {
     Ids(Vec<u32>),
     Stats(Vec<Pokemon>),
 }

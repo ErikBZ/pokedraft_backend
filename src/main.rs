@@ -30,11 +30,15 @@ async fn init_db() -> Surreal<Client> {
 async fn rocket() -> _ {
     let db = init_db().await;
 
-    // Connect to the server
     rocket::build()
         .manage(db)
         .mount("/api/v1", routes![endpoints::get_pokemon])
         .mount("/api/v1", routes![endpoints::list_pokemon])
-        .mount("/api/v1", routes![endpoints::list_pokemon_draft_set])
         .mount("/api/v1", routes![endpoints::get_pokemon_draft_set])
+        .mount("/api/v1", routes![endpoints::list_pokemon_draft_set])
+        .mount("/api/v1", routes![endpoints::get_draft_rules])
+        .mount("/api/v1", routes![endpoints::list_draft_rules])
+        .mount("/api/v1", routes![endpoints::create_draft_rules])
+        .mount("/api/v1", routes![endpoints::get_draft_session])
+        .mount("/api/v1", routes![endpoints::create_draft_session])
 }

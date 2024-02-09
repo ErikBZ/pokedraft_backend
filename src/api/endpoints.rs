@@ -1,4 +1,6 @@
+use crate::models::draft::{DraftRules, DraftSession, DraftSessionCreateForm};
 use crate::models::pokemon::{Pokemon, PokemonDraftSet};
+use crate::models::Record;
 use rocket::serde::json::Json;
 use rocket::State;
 use serde::Deserialize;
@@ -11,13 +13,13 @@ pub async fn get_pokemon(id: u64, db: &State<Surreal<Client>>) -> Option<Json<Po
         Ok(p) => p,
         Err(e) => {
             println!("{}", e);
-            return None
+            return None;
         }
     };
 
     match pokemon {
         Some(p) => Some(Json(p)),
-        None => None
+        None => None,
     }
 }
 
@@ -65,6 +67,121 @@ pub async fn get_pokemon_draft_set(
     }
 }
 
+#[get("/draft_rules/get/<id>")]
+pub async fn get_draft_rules(id: &str, db: &State<Surreal<Client>>) -> Option<Json<DraftRules>> {
+    let rules: Option<DraftRules> = match db.select(("draft_rules", id)).await {
+        Ok(p) => p,
+        Err(e) => {
+            println!("{}", e);
+            None
+        }
+    };
+
+    match rules {
+        Some(r) => Some(Json(r)),
+        None => None,
+    }
+}
+
+#[get("/draft_rules/get")]
+pub async fn list_draft_rules(db: &State<Surreal<Client>>) -> Json<Vec<DraftRules>> {
+    let draft_sets = match db.select("draft_rules").await {
+        Ok(p) => p,
+        Err(e) => {
+            println!("{}", e);
+            Vec::new()
+        }
+    };
+
+    Json(draft_sets)
+}
+
+#[post("/draft_rules/create", format = "application/json", data = "<dr_form>")]
+pub async fn create_draft_rules(
+    dr_form: Json<DraftRules>,
+    db: &State<Surreal<Client>>,
+) -> Option<String> {
+    // should you even do this?
+    let draft_rules: DraftRules = dr_form.0;
+
+    let result: Vec<Record> = match db.create("draft_rules").content(draft_rules).await {
+        Ok(r) => r,
+        Err(e) => {
+            println!("{}", e);
+            return None;
+        }
+    };
+
+    let record = if result.len() > 0 {
+        format!("{{\"id\": \"{}\"}}", result[0].id)
+    } else {
+        "{\"message\": \"Could not create Draft Rule\"}".into()
+    };
+
+    Some(record)
+}
+
+#[get("/draft_session/get/<id>")]
+pub async fn get_draft_session(
+    id: &str,
+    db: &State<Surreal<Client>>,
+) -> Option<Json<DraftSession>> {
+    let session: Option<DraftSession> = match db.select(("draft_session", id)).await {
+        Ok(p) => p,
+        Err(e) => {
+            println!("{}", e);
+            None
+        }
+    };
+
+    match session {
+        Some(ds) => Some(Json(ds)),
+        None => None,
+    }
+}
+
+#[post(
+    "/draft_session/create",
+    format = "application/json",
+    data = "<session_form>"
+)]
+pub async fn create_draft_session(
+    session_form: Json<DraftSessionCreateForm>,
+    db: &State<Surreal<Client>>,
+) -> Option<String> {
+    // should you even do this?
+    let session_form: DraftSessionCreateForm = session_form.0;
+
+    let rules: DraftRules = match db.select(("draft_rules", &session_form.draft_rules)).await {
+        Ok(p) => match p {
+            Some(r) => r,
+            None => return None,
+        },
+        Err(e) => {
+            println!("{}", e);
+            return None;
+        }
+    };
+
+    let draft_session = DraftSession::from(session_form, rules);
+    let result: Vec<Record> = match db.create("draft_session").content(draft_session).await {
+        Ok(r) => r,
+        Err(e) => {
+            println!("{}", e);
+            return None;
+        }
+    };
+
+    let record = if result.len() > 0 {
+        format!("{{\"id\": \"{}\"}}", result[0].id)
+    } else {
+        "{\"message\": \"Could not create Draft Rule\"}".into()
+    };
+
+    Some(record)
+}
+
+// TODO actually do something useful with those errors
 async fn run_query<T>(query: String, db: &State<Surreal<Client>>) -> Option<T>
 where
     for<'a> T: Deserialize<'a>,
@@ -75,7 +192,7 @@ where
             Err(e) => {
                 println!("{}", e);
                 None
-            },
+            }
         },
         Err(_) => None,
     };
