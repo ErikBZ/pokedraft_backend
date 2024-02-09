@@ -20,6 +20,9 @@ async def main():
         #await db.query("DEFINE INDEX unqiue_pokemon_in_list ON TABLE contains COLUMNS in, out, UNIQUE")
         await create_pokemon_lists(db)
 
+        await db.delete("draft_rules")
+        await create_draft_rules(db)
+
 async def save_pokemon_to_db(db, pokemon):
     for pk in pokemon:
         pk['evolves_from'] = 0 if pk["evolves_from"] == "" else int(pk["evolves_from"])
@@ -41,14 +44,14 @@ async def save_pokemon_to_db(db, pokemon):
 def pokemon_select(before_gen=None, is_legendary=None, is_mythic=None, base_evolution=False):
     sql = "SELECT id FROM pokemon"
     filters = []
-    if before_gen != None:
+    if before_gen is not None:
         filters.append(f"gen <= {before_gen}")
-    if is_legendary != None:
+    if is_legendary is not None:
         filters.append(f"is_legendary = {is_legendary}")
-    if is_mythic != None:
+    if is_mythic is not None:
         filters.append(f"is_mythic = {is_mythic}")
     if base_evolution:
-        filters.append(f"evolves_from = 0")
+        filters.append("evolves_from = 0")
 
     if len(filters) != 0:
         sql += " WHERE " + " and ".join(filters)
@@ -82,14 +85,51 @@ async def create_pokemon_lists(db):
         result = await db.create("pokemon_draft_set", {"name": f"Pokemon All Gens {f[0]}"})
         sub_sql = pokemon_select()
         if len(result) == 1:
-            print(f"Creating Set: Pokemon All Gens")
+            print("Creating Set: Pokemon All Gens")
             await db.query(f"RELATE {result[0]['id']}->contains->({sub_sql})")
         else:
             print(f"Result was not a single item, but expected only 1: {result}")
 
     debug_sql = "SELECT id FROM pokemon WHERE dex_id < 10"
-    result = await db.create("pokemon_draft_set", {"name": f"Debug Set"})
+    result = await db.create("pokemon_draft_set", {"name": "Debug Set"})
     await db.query(f"RELATE {result[0]['id']}->contains->({debug_sql})")
+
+async def create_draft_rules(db):
+    await db.create("draft_rules", {
+        "name": "Showdown Snake",
+        "picks_per_round": 1,
+        "bans_per_round": 3,
+        "max_pokemon": 6,
+        "starting_phase": "Ban",
+        "turn_type": "Snake"
+    })
+
+    await db.create("draft_rules", {
+        "name": "Showdown Round Robin",
+        "picks_per_round": 1,
+        "bans_per_round": 3,
+        "max_pokemon": 6,
+        "starting_phase": "Ban",
+        "turn_type": "RoundRobin"
+    })
+
+    await db.create("draft_rules", {
+        "name": "Nuzlocke Snake",
+        "picks_per_round": 1,
+        "bans_per_round": 2,
+        "max_pokemon": 15,
+        "starting_phase": "Ban",
+        "turn_type": "Snake"
+    })
+
+    await db.create("draft_rules", {
+        "name": "Nuzlocke Round Robin",
+        "picks_per_round": 1,
+        "bans_per_round": 2,
+        "max_pokemon": 15,
+        "starting_phase": "Ban",
+        "turn_type": "RoundRobin"
+    })
 
 if __name__ == "__main__":
     import asyncio
