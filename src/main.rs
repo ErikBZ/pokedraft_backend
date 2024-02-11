@@ -41,4 +41,5 @@ async fn rocket() -> _ {
         .mount("/api/v1", routes![endpoints::create_draft_rules])
         .mount("/api/v1", routes![endpoints::get_draft_session])
         .mount("/api/v1", routes![endpoints::create_draft_session])
+        .mount("/api/v1", routes![endpoints::create_user])
 }

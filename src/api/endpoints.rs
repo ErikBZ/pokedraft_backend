@@ -1,11 +1,17 @@
-use crate::models::draft::{DraftRules, DraftSession, DraftSessionCreateForm};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
+use crate::models::draft::{DraftRules, DraftSession, DraftSessionCreateForm, DraftUser, DraftUserForm, DraftUserReturnData};
 use crate::models::pokemon::{Pokemon, PokemonDraftSet};
 use crate::models::Record;
+use rocket::response::status::NotFound;
 use rocket::serde::json::Json;
 use rocket::State;
 use serde::Deserialize;
 use surrealdb::engine::remote::ws::Client;
+use surrealdb::sql::{Id, Thing};
 use surrealdb::Surreal;
+use uuid::Uuid;
 
 #[get("/pokemon/get/<id>")]
 pub async fn get_pokemon(id: u64, db: &State<Surreal<Client>>) -> Option<Json<Pokemon>> {
@@ -181,6 +187,58 @@ pub async fn create_draft_session(
     Some(record)
 }
 
+#[post(
+    "/draft_session/<id>/create-user",
+    format = "application/json",
+    data = "<user_form>"
+)]
+pub async fn create_user(
+    user_form: Json<DraftUserForm>,
+    id: &str,
+    db: &State<Surreal<Client>>,
+) -> Result<Option<DraftUserReturnData>, NotFound<String>> {
+    let new_username = user_form.0.name;
+    let query = format!("SELECT *,->players.out.* as players FROM draft_session:{id};");
+
+    // Guarding Checks
+    let session: DraftSession = match run_query(query, db).await {
+        Some(s) => s,
+        None => return Err(NotFound("Session not found".into())),
+    };
+
+    for username in session.get_names() {
+        if new_username == username {
+            return Err(NotFound("Username already in use".into()));
+        }
+    }
+
+    if !session.slots_available(){
+        return Err(NotFound("No slots available to join".into()));
+    }
+
+    // Create User
+    let key = Uuid::new_v4();
+    let mut hasher = DefaultHasher::new();
+    key.hash(&mut hasher);
+    let hash = hasher.finish();
+
+    let new_user = DraftUser::new(new_username.clone(), hash, session.num_of_players() + 1);
+    let new_records: Vec<Record> = match db.create("draft_user").content(new_user).await {
+        Ok(r) => r,
+        Err(e) => {
+            println!("{}", e);
+            return Err(NotFound("Could not create record".into()));
+        }
+    };
+
+    let user_id = format!("{}", new_records[0].id.id);
+    relate_objects(db, &Thing{tb:"draft_session".into(), id: Id::String(id.into())}, &new_records[0].id, "user").await?;
+    let return_data = DraftUserReturnData::new(new_username.clone(), id.into(), user_id, false, format!("{key}"));
+
+    // Only Return Subset of Items
+    Ok(Some(return_data))
+}
+
 // TODO actually do something useful with those errors
 async fn run_query<T>(query: String, db: &State<Surreal<Client>>) -> Option<T>
 where
@@ -194,8 +252,22 @@ where
                 None
             }
         },
-        Err(_) => None,
+        Err(e) => {
+            println!("{}", e);
+            None
+        }
     };
 
     resp
+}
+
+async fn relate_objects(
+    db: &State<Surreal<Client>>,
+    obj_in: &Thing,
+    obj_out: &Thing,
+    relation: &str
+) -> Result<(), NotFound<String>> {
+    let query = format!("RELATE {}->{}->{};", obj_in, relation, obj_out);
+    let _ = db.query(query).await.map_err(|e| NotFound(e.to_string()));
+    Ok(())
 }
