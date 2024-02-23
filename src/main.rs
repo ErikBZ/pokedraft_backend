@@ -1,5 +1,6 @@
 #[macro_use] extern crate rocket;
 extern crate surrealdb;
+use api::CORS;
 use surrealdb::engine::remote::ws::{Ws, Client};
 use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
@@ -42,4 +43,5 @@ async fn rocket() -> _ {
         .mount("/api/v1", routes![endpoints::get_draft_session])
         .mount("/api/v1", routes![endpoints::create_draft_session])
         .mount("/api/v1", routes![endpoints::create_user])
+        .attach(CORS)
 }
