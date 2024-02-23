@@ -1,17 +1,20 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-
-use crate::models::draft::{DraftRules, DraftSession, DraftSessionCreateForm, DraftUser, DraftUserForm, DraftUserReturnData};
+use crate::models::draft::{
+    DraftPhase, DraftRules, DraftSession, DraftSessionCreateForm, DraftUser, DraftUserForm,
+    DraftUserReturnData,
+};
 use crate::models::pokemon::{Pokemon, PokemonDraftSet};
-use crate::models::Record;
+use crate::models::{hash_uuid, Record};
 use rocket::response::status::NotFound;
 use rocket::serde::json::Json;
 use rocket::State;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use surrealdb::engine::remote::ws::Client;
 use surrealdb::sql::{Id, Thing};
 use surrealdb::Surreal;
 use uuid::Uuid;
+
+const DRAFT_USER_RELATION: &str = "players";
+const DRAFT_SESSION: &str = "draft_session";
 
 #[get("/pokemon/get/<id>")]
 pub async fn get_pokemon(id: u64, db: &State<Surreal<Client>>) -> Option<Json<Pokemon>> {
@@ -196,9 +199,10 @@ pub async fn create_user(
     user_form: Json<DraftUserForm>,
     id: &str,
     db: &State<Surreal<Client>>,
-) -> Result<Option<DraftUserReturnData>, NotFound<String>> {
+) -> Result<Json<DraftUserReturnData>, NotFound<String>> {
     let new_username = user_form.0.name;
-    let query = format!("SELECT *,->players.out.* as players FROM draft_session:{id};");
+    let query =
+        format!("SELECT *,->{DRAFT_USER_RELATION}.out.* as players FROM draft_session:{id};");
 
     // Guarding Checks
     let session: DraftSession = match run_query(query, db).await {
@@ -212,17 +216,15 @@ pub async fn create_user(
         }
     }
 
-    if !session.slots_available(){
+    if !session.slots_available() {
         return Err(NotFound("No slots available to join".into()));
     }
 
     // Create User
     let key = Uuid::new_v4();
-    let mut hasher = DefaultHasher::new();
-    key.hash(&mut hasher);
-    let hash = hasher.finish();
+    let hash = hash_uuid(&key);
 
-    let new_user = DraftUser::new(new_username.clone(), hash, session.num_of_players() + 1);
+    let new_user = DraftUser::new(new_username.clone(), hash, session.num_of_players());
     let new_records: Vec<Record> = match db.create("draft_user").content(new_user).await {
         Ok(r) => r,
         Err(e) => {
@@ -231,12 +233,47 @@ pub async fn create_user(
         }
     };
 
+    relate_objects(
+        db,
+        &Thing {
+            tb: "draft_session".into(),
+            id: Id::String(id.into()),
+        },
+        &new_records[0].id,
+        DRAFT_USER_RELATION,
+    )
+    .await?;
+
+    #[derive(Serialize)]
+    struct UpdateData {
+        accepting_players: bool,
+    }
+    let mut update_data = UpdateData {
+        accepting_players: true,
+    };
+
+    // TODO might need to do smarter casting of u16 to u32
+    if session.num_of_players() + 1 >= (session.max_num_players as u32) {
+        update_data.accepting_players = false;
+    }
+
+    let _updated: Option<Record> = db
+        .update((DRAFT_SESSION, id))
+        .merge(update_data)
+        .await
+        .map_err(|e| NotFound(e.to_string()))?;
+
     let user_id = format!("{}", new_records[0].id.id);
-    relate_objects(db, &Thing{tb:"draft_session".into(), id: Id::String(id.into())}, &new_records[0].id, "user").await?;
-    let return_data = DraftUserReturnData::new(new_username.clone(), id.into(), user_id, false, format!("{key}"));
+    let return_data = DraftUserReturnData::new(
+        new_username.clone(),
+        id.into(),
+        user_id,
+        false,
+        format!("{key}"),
+    );
 
     // Only Return Subset of Items
-    Ok(Some(return_data))
+    Ok(Json(return_data))
 }
 
 // TODO actually do something useful with those errors
@@ -265,9 +302,25 @@ async fn relate_objects(
     db: &State<Surreal<Client>>,
     obj_in: &Thing,
     obj_out: &Thing,
-    relation: &str
+    relation: &str,
 ) -> Result<(), NotFound<String>> {
     let query = format!("RELATE {}->{}->{};", obj_in, relation, obj_out);
     let _ = db.query(query).await.map_err(|e| NotFound(e.to_string()));
     Ok(())
+}
+
+// structs
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SelectPokemonRequest {
+    user_id: String,
+    pokemon_id: u32,
+    action: DraftPhase,
+    secret: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SelectPokemonResponse {
+    selected_pokemon: Vec<u32>,
+    banned_pokemon: Vec<u32>,
+    phase: DraftPhase,
 }
