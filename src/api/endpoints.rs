@@ -76,7 +76,7 @@ pub async fn get_pokemon_draft_set(
     }
 }
 
-#[get("/draft_rules/get/<id>")]
+#[get("/draft_rules/<id>")]
 pub async fn get_draft_rules(id: &str, db: &State<Surreal<Client>>) -> Option<Json<DraftRules>> {
     let rules: Option<DraftRules> = match db.select(("draft_rules", id)).await {
         Ok(p) => p,
@@ -92,7 +92,7 @@ pub async fn get_draft_rules(id: &str, db: &State<Surreal<Client>>) -> Option<Js
     }
 }
 
-#[get("/draft_rules/get")]
+#[get("/draft_rules")]
 pub async fn list_draft_rules(db: &State<Surreal<Client>>) -> Json<Vec<DraftRules>> {
     let draft_sets = match db.select("draft_rules").await {
         Ok(p) => p,
@@ -274,6 +274,76 @@ pub async fn create_user(
 
     // Only Return Subset of Items
     Ok(Json(return_data))
+}
+
+#[post(
+    "/draft_session/<id>/select-pokemon",
+    format = "application/json",
+    data = "<select_pokemon_form>"
+)]
+pub async fn select_pokemon(
+    select_pokemon_form: Json<SelectPokemonRequest>,
+    id: &str,
+    db: &State<Surreal<Client>>,
+) -> Result<Json<SelectPokemonResponse>, NotFound<String>> {
+    let select_pokemon = select_pokemon_form.0;
+    let mut session: DraftSession = match db
+        .select(("draft_session", id))
+        .await
+        .map_err(|e| NotFound(e.to_string()))
+    {
+        Ok(s) => match s {
+            Some(se) => se,
+            None => return Err(NotFound("Could not find session".into())),
+        },
+        Err(e) => return Err(e),
+    };
+
+    let mut draft_user: DraftUser = match db
+        .select(("draft_user", select_pokemon.user_id))
+        .await
+        .map_err(|e| NotFound(e.to_string()))
+    {
+        Ok(d) => match d {
+            Some(du) => du,
+            None => return Err(NotFound("Could not find draft user".into())),
+        },
+        Err(e) => return Err(e),
+    };
+
+    let key_hash = match Uuid::parse_str(&select_pokemon.secret) {
+        Ok(k) => hash_uuid(&k),
+        Err(_) => return Err(NotFound("Could not parse uuid".into())),
+    };
+
+    if !draft_user.check_key_hash(key_hash) {
+        return Err(NotFound("Access Denied".into()));
+    }
+    if !session.draft_has_started() {
+        return Err(NotFound("Draft has not yet started".into()));
+    }
+    if !session.is_current_player(draft_user.order_in_session) {
+        return Err(NotFound("It is not your turn".into()));
+    }
+    if select_pokemon.action != session.current_phase {
+        return Err(NotFound("Current action not allowed".into()));
+    }
+    if session.is_pokemon_chosen(&select_pokemon.pokemon_id) {
+        return Err(NotFound(
+            "Pokemon cannot be selected. It's either banned or has already been selected.".into(),
+        ));
+    }
+
+    if select_pokemon.action == DraftPhase::Pick {
+        draft_user.select_pokemon(select_pokemon.pokemon_id);
+    }
+    session.choose_pokemon(select_pokemon.pokemon_id);
+
+    Ok(Json(SelectPokemonResponse {
+        selected_pokemon: Vec::new(),
+        banned_pokemon: Vec::new(),
+        phase: DraftPhase::Ban,
+    }))
 }
 
 // TODO actually do something useful with those errors
