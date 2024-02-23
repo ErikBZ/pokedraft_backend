@@ -45,7 +45,7 @@ pub async fn list_pokemon(db: &State<Surreal<Client>>) -> Json<Vec<Pokemon>> {
     Json(pokemon)
 }
 
-#[get("/pokemon_draft_set/get")]
+#[get("/draft_set")]
 pub async fn list_pokemon_draft_set(db: &State<Surreal<Client>>) -> Json<Vec<PokemonDraftSet>> {
     let draft_sets = match db.select("pokemon_draft_set").await {
         Ok(p) => p,
@@ -58,16 +58,16 @@ pub async fn list_pokemon_draft_set(db: &State<Surreal<Client>>) -> Json<Vec<Pok
     Json(draft_sets)
 }
 
-#[get("/pokemon_draft_set/get/<id>?<detailed>")]
+#[get("/draft_set/<id>?<detailed>")]
 pub async fn get_pokemon_draft_set(
     id: &str,
     detailed: bool,
     db: &State<Surreal<Client>>,
 ) -> Option<Json<PokemonDraftSet>> {
     let query: String = if !detailed {
-        format!("SELECT name,id,->contains.out.dex_id as pokemon.Ids FROM pokemon_draft_set:{id};")
+        format!("SELECT name,id,array::sort(->contains.out.dex_id, asc) as pokemon.Ids FROM pokemon_draft_set:{id};")
     } else {
-        format!("SELECT name,id,->contains.out.* as pokemon.Stats FROM pokemon_draft_set:{id};")
+        format!("SELECT name,id,array::sort(->contains.out.*, asc) as pokemon.Stats FROM pokemon_draft_set:{id};")
     };
 
     match run_query(query, db).await {
