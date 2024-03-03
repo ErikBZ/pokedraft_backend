@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 #[warn(dead_code)]
 pub enum DraftPhase {
     Pick,
@@ -32,12 +32,12 @@ pub struct DraftSession {
     name: String,
     min_num_players: u16,
     pub max_num_players: u16,
-    selected_pokemon: Vec<u32>,
+    pub selected_pokemon: Vec<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    players: Option<Vec<DraftUser>>,
+    pub players: Option<Vec<DraftUser>>,
     draft_rules: Option<String>,
     draft_set: Option<String>,
-    current_player: u32,
+    pub current_player: u32,
     turn_ticker: u32,
     accepting_players: bool,
     pub current_phase: DraftPhase,
@@ -120,10 +120,10 @@ pub struct DraftSessionCreateForm {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DraftUser {
     id: Option<Thing>,
-    name: String,
+    pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     session: Option<Thing>,
-    pokemon_selected: Vec<u32>,
+    pub pokemon_selected: Vec<u32>,
     // find some crypto hash
     key_hash: i64,
     pub order_in_session: u32,

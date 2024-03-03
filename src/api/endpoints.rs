@@ -2,7 +2,7 @@ use crate::models::draft::{
     DraftPhase, DraftRules, DraftSession, DraftSessionCreateForm, DraftUser, DraftUserForm,
     DraftUserReturnData,
 };
-use crate::models::pokemon::{Pokemon, PokemonDraftSet};
+use crate::models::pokemon::{Pokemon, PokemonDraftSet, PokemonType};
 use crate::models::{hash_uuid, Record};
 use rocket::response::status::NotFound;
 use rocket::serde::json::Json;
@@ -122,7 +122,7 @@ pub async fn create_draft_rules(
     };
 
     let record = if result.len() > 0 {
-        format!("{{\"id\": \"{}\"}}", result[0].id)
+        format!("{{\"id\": \"{}\"}}", result[0].id.id)
     } else {
         "{\"message\": \"Could not create Draft Rule\"}".into()
     };
@@ -130,7 +130,7 @@ pub async fn create_draft_rules(
     Some(record)
 }
 
-#[get("/draft_session/get/<id>")]
+#[get("/draft_session/<id>")]
 pub async fn get_draft_session(
     id: &str,
     db: &State<Surreal<Client>>,
@@ -147,6 +147,11 @@ pub async fn get_draft_session(
         Some(ds) => Some(Json(ds)),
         None => None,
     }
+}
+
+#[options("/draft_session/create")]
+pub fn option_draft_session<'a>() -> &'a str {
+    "Ok"
 }
 
 #[post(
@@ -182,12 +187,36 @@ pub async fn create_draft_session(
     };
 
     let record = if result.len() > 0 {
-        format!("{{\"id\": \"{}\"}}", result[0].id)
+        format!("{{\"id\": \"{}\"}}", result[0].id.id)
     } else {
         "{\"message\": \"Could not create Draft Rule\"}".into()
     };
 
     Some(record)
+}
+
+#[get("/draft_session/<id>/update")]
+pub async fn update_draft_session(
+    id: &str,
+    db: &State<Surreal<Client>>,
+) -> Result<Json<UpdateDraftSessionResponse>, NotFound<String>> {
+    let query =
+        format!("SELECT *,(SELECT * from ->{DRAFT_USER_RELATION}.out ORDER BY order_in_session ASC) as players FROM draft_session:{id};");
+
+    let session: DraftSession = match run_query(query, db).await {
+        Some(s) => s,
+        None => return Err(NotFound("Session not found".into())),
+    };
+
+
+
+    let resp = UpdateDraftSessionResponse::from(session);
+    Ok(Json(resp))
+}
+
+#[options("/draft_session/<id>/create-user")]
+pub fn option_create_user<'a>(id: &str) -> &'a str {
+    "Ok"
 }
 
 #[post(
@@ -393,4 +422,56 @@ pub struct SelectPokemonResponse {
     selected_pokemon: Vec<u32>,
     banned_pokemon: Vec<u32>,
     phase: DraftPhase,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateDraftSessionResponse {
+    current_phase: DraftPhase,
+    banned_pokemon: Vec<u32>,
+    current_player: String,
+    players: Vec<PlayerData>,
+}
+
+impl UpdateDraftSessionResponse {
+    fn from(session: DraftSession) -> UpdateDraftSessionResponse {
+        let players = match session.players {
+            Some(p) => p,
+            None => Vec::new(),
+        };
+
+        let current_player_name = if players.len() > 0 {
+            players[session.current_player as usize].name.clone()
+        } else {
+            "None".into()
+        };
+
+        // TODO clone is very expensive, figure out a way to avoid using it
+        let player_data: Vec<PlayerData> = players.iter().map(|element| {
+            PlayerData {
+                name: element.name.clone(),
+                pokemon: element.pokemon_selected.clone(),
+            }
+        }).collect();
+
+        UpdateDraftSessionResponse {
+            banned_pokemon: session.selected_pokemon,
+            current_phase: session.current_phase,
+            current_player: current_player_name,
+            players: player_data
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PlayerData {
+    name: String,
+    pokemon: Vec<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PokemonSubData<'a> {
+    name: &'a str,
+    type1: PokemonType,
+    type2: PokemonType,
+    id: u32,
 }
