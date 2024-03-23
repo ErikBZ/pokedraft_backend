@@ -47,5 +47,6 @@ async fn rocket() -> _ {
         .mount("/api/v1", routes![endpoints::create_user])
         .mount("/api/v1", routes![endpoints::option_create_user])
         .mount("/api/v1", routes![endpoints::select_pokemon])
+        .mount("/api/v1", routes![endpoints::option_select_pokemon])
         .attach(CORS)
 }

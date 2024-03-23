@@ -30,7 +30,7 @@ pub struct DraftRules {
 pub struct DraftSession {
     pub id: Option<Thing>,
     name: String,
-    min_num_players: u16,
+    pub min_num_players: u16,
     pub max_num_players: u16,
     pub selected_pokemon: Vec<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]

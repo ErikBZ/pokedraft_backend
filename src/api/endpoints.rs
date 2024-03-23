@@ -208,8 +208,6 @@ pub async fn update_draft_session(
         None => return Err(NotFound("Session not found".into())),
     };
 
-
-
     let resp = UpdateDraftSessionResponse::from(session);
     Ok(Json(resp))
 }
@@ -305,6 +303,11 @@ pub async fn create_user(
     Ok(Json(return_data))
 }
 
+#[options("/draft_session/<id>/select-pokemon")]
+pub fn option_select_pokemon<'a>(id: &str) -> &'a str {
+    "Ok"
+}
+
 #[post(
     "/draft_session/<id>/select-pokemon",
     format = "application/json",
@@ -316,6 +319,7 @@ pub async fn select_pokemon(
     db: &State<Surreal<Client>>,
 ) -> Result<Json<SelectPokemonResponse>, NotFound<String>> {
     let select_pokemon = select_pokemon_form.0;
+    // TODO should be able to use ? operator and then just unwrap within the match
     let mut session: DraftSession = match db
         .select(("draft_session", id))
         .await
@@ -368,6 +372,22 @@ pub async fn select_pokemon(
     }
     session.choose_pokemon(select_pokemon.pokemon_id);
 
+    // update Session
+    #[derive(Serialize)]
+    struct UpdateData {
+        selected_pokemon: Vec<u32>,
+    }
+    let update_data = UpdateData {
+        selected_pokemon: session.selected_pokemon,
+    };
+
+    let _updated: Option<Record> = db
+        .update((DRAFT_SESSION, id))
+        .merge(update_data)
+        .await
+        .map_err(|e| NotFound(e.to_string()))?;
+
+    // TODO selected_pokemon should be set to the updated array of pk_ids
     Ok(Json(SelectPokemonResponse {
         selected_pokemon: Vec::new(),
         banned_pokemon: Vec::new(),
@@ -376,6 +396,7 @@ pub async fn select_pokemon(
 }
 
 // TODO actually do something useful with those errors
+// use map_error, maybe return result?
 async fn run_query<T>(query: String, db: &State<Surreal<Client>>) -> Option<T>
 where
     for<'a> T: Deserialize<'a>,
@@ -446,18 +467,19 @@ impl UpdateDraftSessionResponse {
         };
 
         // TODO clone is very expensive, figure out a way to avoid using it
-        let player_data: Vec<PlayerData> = players.iter().map(|element| {
-            PlayerData {
+        let player_data: Vec<PlayerData> = players
+            .iter()
+            .map(|element| PlayerData {
                 name: element.name.clone(),
                 pokemon: element.pokemon_selected.clone(),
-            }
-        }).collect();
+            })
+            .collect();
 
         UpdateDraftSessionResponse {
             banned_pokemon: session.selected_pokemon,
             current_phase: session.current_phase,
             current_player: current_player_name,
-            players: player_data
+            players: player_data,
         }
     }
 }
