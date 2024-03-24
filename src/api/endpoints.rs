@@ -16,6 +16,10 @@ use uuid::Uuid;
 const DRAFT_USER_RELATION: &str = "players";
 const DRAFT_SESSION: &str = "draft_session";
 
+fn to_json_err(str: &str) -> String {
+    return format!("{{\"message\": \"{}\"}}", str)
+}
+
 #[get("/pokemon/get/<id>")]
 pub async fn get_pokemon(id: u64, db: &State<Surreal<Client>>) -> Option<Json<Pokemon>> {
     let pokemon: Option<Pokemon> = match db.select(("pokemon", id)).await {
@@ -76,6 +80,7 @@ pub async fn get_pokemon_draft_set(
     }
 }
 
+// TODO: Move these out and get draft rules based on name too?
 #[get("/draft_rules/<id>")]
 pub async fn get_draft_rules(id: &str, db: &State<Surreal<Client>>) -> Option<Json<DraftRules>> {
     let rules: Option<DraftRules> = match db.select(("draft_rules", id)).await {
@@ -327,7 +332,7 @@ pub async fn select_pokemon(
     {
         Ok(s) => match s {
             Some(se) => se,
-            None => return Err(NotFound("Could not find session".into())),
+            None => return Err(NotFound(to_json_err("Could not find session"))),
         },
         Err(e) => return Err(e),
     };
@@ -339,7 +344,7 @@ pub async fn select_pokemon(
     {
         Ok(d) => match d {
             Some(du) => du,
-            None => return Err(NotFound("Could not find draft user".into())),
+            None => return Err(NotFound(to_json_err("Could not find draft user"))),
         },
         Err(e) => return Err(e),
     };
@@ -350,20 +355,20 @@ pub async fn select_pokemon(
     };
 
     if !draft_user.check_key_hash(key_hash) {
-        return Err(NotFound("Access Denied".into()));
+        return Err(NotFound(to_json_err("Access Denied")));
     }
     if !session.draft_has_started() {
-        return Err(NotFound("Draft has not yet started".into()));
+        return Err(NotFound(to_json_err("Draft has not yet started")));
     }
     if !session.is_current_player(draft_user.order_in_session) {
-        return Err(NotFound("It is not your turn".into()));
+        return Err(NotFound(to_json_err("It is not your turn")));
     }
     if select_pokemon.action != session.current_phase {
-        return Err(NotFound("Current action not allowed".into()));
+        return Err(NotFound(to_json_err("Current action not allowed")));
     }
     if session.is_pokemon_chosen(&select_pokemon.pokemon_id) {
         return Err(NotFound(
-            "Pokemon cannot be selected. It's either banned or has already been selected.".into(),
+            to_json_err("Pokemon cannot be selected. It's either banned or has already been selected."),
         ));
     }
 

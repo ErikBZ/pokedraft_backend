@@ -39,6 +39,8 @@ pub struct Pokemon {
     pub is_mythic: bool,
 }
 
+// TODO: Option<Thing> is ugly, need to figure out a better way
+// to return this as json
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct PokemonDraftSet {
