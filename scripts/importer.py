@@ -23,6 +23,7 @@ async def main():
         await db.delete("draft_rules")
         await create_draft_rules(db)
 
+# TODO maybe create a fixed ID for the initial sets?
 async def save_pokemon_to_db(db, pokemon):
     for pk in pokemon:
         pk['evolves_from'] = 0 if pk["evolves_from"] == "" else int(pk["evolves_from"])
@@ -127,6 +128,24 @@ async def create_draft_rules(db):
         "picks_per_round": 1,
         "bans_per_round": 2,
         "max_pokemon": 15,
+        "starting_phase": "Ban",
+        "turn_type": "RoundRobin"
+    })
+
+    await db.create("draft_rules", {
+        "name": "Intergration Test Snake",
+        "picks_per_round": 1,
+        "bans_per_round": 1,
+        "max_pokemon": 1,
+        "starting_phase": "Ban",
+        "turn_type": "Snake"
+    })
+
+    await db.create("draft_rules", {
+        "name": "Intergration Test Round Robin",
+        "picks_per_round": 1,
+        "bans_per_round": 1,
+        "max_pokemon": 1,
         "starting_phase": "Ban",
         "turn_type": "RoundRobin"
     })
