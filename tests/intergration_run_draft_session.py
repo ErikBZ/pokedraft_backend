@@ -113,26 +113,29 @@ def test_create_session_4_player_join_select_snake():
     res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[0])
     assert status == 200
     assert res_data == {
-        "phase": "Pick",
+        "phase": "Ban",
         "banned_pokemon": [1],
         "selected_pokemon": [],
     }, f"{res_data}"
+    print(f"Passed: {players[0]['name']} banning pokemon 1.")
 
     res_data, status = player_ban_pokemon(session, players[1], DEBUG_POKEMON_SET[1])
     assert status == 200
     assert res_data == {
-        "phase": "Pick",
+        "phase": "Ban",
         "banned_pokemon": [1, 2],
         "selected_pokemon": [],
     }, f"{res_data}"
+    print(f"Passed: {players[1]['name']} banning pokemon 2.")
 
     res_data, status = player_ban_pokemon(session, players[2], DEBUG_POKEMON_SET[2])
     assert status == 200
     assert res_data == {
-        "phase": "Pick",
+        "phase": "Ban",
         "banned_pokemon": [1, 2, 3],
         "selected_pokemon": [],
     }, f"{res_data}"
+    print(f"Passed: {players[2]['name']} banning pokemon 3.")
 
     res_data, status = player_ban_pokemon(session, players[3], DEBUG_POKEMON_SET[3])
     assert status == 200
@@ -141,18 +144,21 @@ def test_create_session_4_player_join_select_snake():
         "banned_pokemon": [1, 2, 3, 4],
         "selected_pokemon": [],
     }, f"{res_data}"
+    print(f"Passed: {players[3]['name']} banning pokemon 4.")
 
-    res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[0])
+    res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[4])
     assert status == 404
     assert res_data == { "message": "It is not your turn" }
+    print(f"Passed: {players[0]['name']} failing to pick pokemon 5.")
 
-    res_data, status = player_ban_pokemon(session, players[3], DEBUG_POKEMON_SET[3])
+    res_data, status = player_ban_pokemon(session, players[3], DEBUG_POKEMON_SET[4])
     assert status == 200
     assert res_data == {
         "phase": "Pick",
         "banned_pokemon": [1, 2, 3, 4],
         "selected_pokemon": [5],
     }, f"{res_data}"
+    print(f"Passed: {players[3]['name']} picking pokemon 5.")
 
 @test
 def test_create_session_3_player_join_select():
