@@ -2,7 +2,7 @@ from surrealdb import Surreal
 import json
 
 def get_json():
-    with open("pokemon_models.json") as f:
+    with open("scripts/pokemon_models.json") as f:
         return json.load(f)
 
 async def main():
@@ -86,7 +86,7 @@ async def create_pokemon_lists(db):
         result = await db.create("pokemon_draft_set", {"name": f"Pokemon All Gens {f[0]}"})
         sub_sql = pokemon_select()
         if len(result) == 1:
-            print("Creating Set: Pokemon All Gens")
+            print(f"Creating Set: Pokemon All Gens {f[0]}")
             await db.query(f"RELATE {result[0]['id']}->contains->({sub_sql})")
         else:
             print(f"Result was not a single item, but expected only 1: {result}")
