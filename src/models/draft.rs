@@ -103,12 +103,9 @@ impl DraftSession {
         let full_cycle = bans_per_round + picks_per_round;
         let normalized_round = round % full_cycle;
 
-        println!("PPR: {picks_per_round}, BPR: {bans_per_round}, NoP: {num_of_players}, Round: {round}, NR: {normalized_round}, FC: {full_cycle}");
-
         match self.draft_rules.starting_phase {
             DraftPhase::Ban => {
                 let some_bool = (normalized_round + bans_per_round) < full_cycle;
-                println!("{some_bool}");
                 if (normalized_round + bans_per_round) < full_cycle {
                     DraftPhase::Ban
                 } else {
@@ -157,10 +154,6 @@ impl DraftSession {
     pub fn is_pokemon_chosen(&self, pk: &u32) -> bool {
         self.selected_pokemon.contains(pk)
     }
-
-    pub fn choose_pokemon(&mut self, pk: u32) {
-        self.selected_pokemon.push(pk)
-    }
 }
 
 // Maybe just change this into a regular form?
@@ -199,10 +192,6 @@ impl DraftUser {
 
     pub fn check_key_hash(&self, key: i64) -> bool {
         self.key_hash == key
-    }
-
-    pub fn select_pokemon(&mut self, pk: u32) {
-        self.selected_pokemon.push(pk);
     }
 }
 
