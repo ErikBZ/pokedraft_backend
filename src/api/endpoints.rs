@@ -4,10 +4,13 @@ use crate::models::draft::{
 };
 use crate::models::pokemon::{Pokemon, PokemonDraftSet, PokemonType};
 use crate::models::{hash_uuid, Record};
+
 use rocket::response::status::NotFound;
 use rocket::serde::json::Json;
 use rocket::State;
+
 use serde::{Deserialize, Serialize};
+
 use surrealdb::engine::remote::ws::Client;
 use surrealdb::sql::{Id, Thing};
 use surrealdb::Surreal;
@@ -15,6 +18,7 @@ use uuid::Uuid;
 
 const DRAFT_USER_RELATION: &str = "players";
 const DRAFT_SESSION: &str = "draft_session";
+const DRAFT_USER_TB: &str = "draft_user";
 
 fn to_json_err(str: &str) -> String {
     return format!("{{\"message\": \"{}\"}}", str)
@@ -239,17 +243,15 @@ pub async fn create_user(
     // Guarding Checks
     let session: DraftSession = match run_query(query, db).await {
         Some(s) => s,
-        None => return Err(NotFound("Session not found".into())),
+        None => return Err(NotFound(to_json_err("Session not found"))),
     };
 
-    for username in session.get_names() {
-        if new_username == username {
-            return Err(NotFound("Username already in use".into()));
-        }
+    if session.is_name_taken(&new_username) {
+        return Err(NotFound(to_json_err("Username already in use")));
     }
 
     if !session.slots_available() {
-        return Err(NotFound("No slots available to join".into()));
+        return Err(NotFound(to_json_err("No slots available to join")));
     }
 
     // Create User
@@ -261,7 +263,7 @@ pub async fn create_user(
         Ok(r) => r,
         Err(e) => {
             println!("{}", e);
-            return Err(NotFound("Could not create record".into()));
+            return Err(NotFound(to_json_err("Could not create record")));
         }
     };
 
@@ -279,9 +281,18 @@ pub async fn create_user(
     #[derive(Serialize)]
     struct UpdateData {
         accepting_players: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        current_player: Option<Thing>,
     }
     let mut update_data = UpdateData {
         accepting_players: true,
+        current_player: None,
+    };
+
+    let user_id = format!("{}", &new_records[0].id.id);
+    if session.num_of_players() == 0 {
+        // TODO Ugh this looks awful
+        update_data.current_player = Some(Thing::from((DRAFT_USER_TB.to_owned(), user_id.clone())));
     };
 
     // TODO might need to do smarter casting of u16 to u32
@@ -295,7 +306,6 @@ pub async fn create_user(
         .await
         .map_err(|e| NotFound(e.to_string()))?;
 
-    let user_id = format!("{}", new_records[0].id.id);
     let return_data = DraftUserReturnData::new(
         new_username.clone(),
         id.into(),
@@ -318,86 +328,127 @@ pub fn option_select_pokemon<'a>(id: &str) -> &'a str {
     format = "application/json",
     data = "<select_pokemon_form>"
 )]
-pub async fn select_pokemon(
+pub async fn select_pokemon<'a>(
     select_pokemon_form: Json<SelectPokemonRequest>,
     id: &str,
     db: &State<Surreal<Client>>,
 ) -> Result<Json<SelectPokemonResponse>, NotFound<String>> {
     let select_pokemon = select_pokemon_form.0;
-    // TODO should be able to use ? operator and then just unwrap within the match
-    let mut session: DraftSession = match db
-        .select(("draft_session", id))
-        .await
-        .map_err(|e| NotFound(e.to_string()))
-    {
-        Ok(s) => match s {
-            Some(se) => se,
-            None => return Err(NotFound(to_json_err("Could not find session"))),
-        },
-        Err(e) => return Err(e),
+
+    let query =
+        format!("SELECT *,(SELECT * from ->{DRAFT_USER_RELATION}.out ORDER BY order_in_session ASC) as players FROM draft_session:{id};");
+
+    let session: DraftSession = match run_query(query, db).await {
+        Some(s) => s,
+        None => return Err(NotFound("Session not found".into())),
     };
 
-    let mut draft_user: DraftUser = match db
-        .select(("draft_user", select_pokemon.user_id))
-        .await
-        .map_err(|e| NotFound(e.to_string()))
-    {
-        Ok(d) => match d {
-            Some(du) => du,
-            None => return Err(NotFound(to_json_err("Could not find draft user"))),
-        },
-        Err(e) => return Err(e),
-    };
+    let draft_user_id = Thing::from((DRAFT_USER_TB.to_owned(), select_pokemon.user_id.clone()));
 
     let key_hash = match Uuid::parse_str(&select_pokemon.secret) {
         Ok(k) => hash_uuid(&k),
         Err(_) => return Err(NotFound("Could not parse uuid".into())),
     };
 
-    if !draft_user.check_key_hash(key_hash) {
-        return Err(NotFound(to_json_err("Access Denied")));
-    }
     if !session.draft_has_started() {
         return Err(NotFound(to_json_err("Draft has not yet started")));
-    }
-    if !session.is_current_player(draft_user.order_in_session) {
-        return Err(NotFound(to_json_err("It is not your turn")));
-    }
-    if select_pokemon.action != session.current_phase {
-        return Err(NotFound(to_json_err("Current action not allowed")));
     }
     if session.is_pokemon_chosen(&select_pokemon.pokemon_id) {
         return Err(NotFound(
             to_json_err("Pokemon cannot be selected. It's either banned or has already been selected."),
         ));
     }
-
-    if select_pokemon.action == DraftPhase::Pick {
-        draft_user.select_pokemon(select_pokemon.pokemon_id);
+    if select_pokemon.action != session.current_phase {
+        return Err(NotFound(to_json_err("Current action not allowed")));
     }
-    session.choose_pokemon(select_pokemon.pokemon_id);
+    if !session.is_current_player(&draft_user_id) {
+        return Err(NotFound(to_json_err("It is not your turn")));
+    };
+
+    // Get Next Player Thing in session
+    let (turn, next_player_id) = session.get_next_player_id();
+    let next_player_id = match next_player_id {
+        Some(s) => Some(Thing::from((DRAFT_USER_TB.to_owned(), s))),
+        None => None
+    };
+
+    // Get Next Phase in Session
+    let next_phase = session.get_next_phase();
+
+    let (mut pokemon_chosen_in_session, players) = (session.selected_pokemon, session.players);
+    let players = match players {
+        Some(p) => p,
+        None => {
+            return Err(NotFound(to_json_err("Nothing")))
+        }
+    };
+    let mut player = match get_current_player(players, &draft_user_id) {
+        Some(p) => p,
+        None => {
+            return Err(NotFound(to_json_err("User not in session.")))
+        }
+    };
+
+    if !player.check_key_hash(key_hash) {
+        return Err(NotFound(to_json_err("Access Denied")));
+    };
+
+    if let DraftPhase::Pick = select_pokemon.action {
+        player.selected_pokemon.push(select_pokemon.pokemon_id);
+    };
+
+    pokemon_chosen_in_session.push(select_pokemon.pokemon_id);
 
     // update Session
     #[derive(Serialize)]
-    struct UpdateData {
-        selected_pokemon: Vec<u32>,
+    struct SessionUpdateData<'a> {
+        selected_pokemon: &'a [u32],
+        turn_ticker: u32,
+        current_player: Option<Thing>,
+        current_phase: DraftPhase,
     }
-    let update_data = UpdateData {
-        selected_pokemon: session.selected_pokemon,
+    let update_data = SessionUpdateData {
+        selected_pokemon: &pokemon_chosen_in_session[..],
+        turn_ticker: turn,
+        current_player: next_player_id,
+        current_phase: next_phase,
     };
-
     let _updated: Option<Record> = db
         .update((DRAFT_SESSION, id))
         .merge(update_data)
         .await
         .map_err(|e| NotFound(e.to_string()))?;
 
+    #[derive(Serialize)]
+    struct PlayerUpdateData<'a> {
+        selected_pokemon: &'a [u32],
+    }
+    let update_data = PlayerUpdateData {
+        selected_pokemon: &player.selected_pokemon[..]
+    };
+    let _updated: Option<Record> = db
+        .update((DRAFT_USER_TB, id))
+        .merge(update_data)
+        .await
+        .map_err(|e| NotFound(e.to_string()))?;
+
     // TODO selected_pokemon should be set to the updated array of pk_ids
     Ok(Json(SelectPokemonResponse {
-        selected_pokemon: Vec::new(),
-        banned_pokemon: Vec::new(),
-        phase: DraftPhase::Ban,
+        selected_pokemon: player.selected_pokemon,
+        banned_pokemon: pokemon_chosen_in_session,
+        phase: next_phase,
     }))
+}
+
+fn get_current_player(players: Vec<DraftUser>, id: &Thing) -> Option<DraftUser> {
+    for player in players {
+        if let Some(ref t) = player.id {
+            if t == id {
+                return Some(player)
+            }
+        }
+    }
+    None
 }
 
 // TODO actually do something useful with those errors
@@ -443,7 +494,7 @@ pub struct SelectPokemonRequest {
     secret: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct SelectPokemonResponse {
     selected_pokemon: Vec<u32>,
     banned_pokemon: Vec<u32>,
@@ -454,29 +505,26 @@ pub struct SelectPokemonResponse {
 pub struct UpdateDraftSessionResponse {
     current_phase: DraftPhase,
     banned_pokemon: Vec<u32>,
-    current_player: String,
+    current_player: Option<String>,
     players: Vec<PlayerData>,
 }
 
 impl UpdateDraftSessionResponse {
     fn from(session: DraftSession) -> UpdateDraftSessionResponse {
-        let players = match session.players {
+        let current_player_name = session.get_current_player_name();
+        let players: Vec<DraftUser> = match session.players {
             Some(p) => p,
             None => Vec::new(),
         };
 
-        let current_player_name = if players.len() > 0 {
-            players[session.current_player as usize].name.clone()
-        } else {
-            "None".into()
-        };
-
         // TODO clone is very expensive, figure out a way to avoid using it
+        // TODO get as slice maybe?
+        // Oh it gets data from players so probably can't use slices
         let player_data: Vec<PlayerData> = players
             .iter()
             .map(|element| PlayerData {
                 name: element.name.clone(),
-                pokemon: element.pokemon_selected.clone(),
+                pokemon: element.selected_pokemon.clone(),
             })
             .collect();
 

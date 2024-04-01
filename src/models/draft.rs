@@ -8,7 +8,7 @@ pub enum DraftPhase {
     Ban,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[warn(dead_code)]
 pub enum TurnType {
     RoundRobin,
@@ -35,10 +35,11 @@ pub struct DraftSession {
     pub selected_pokemon: Vec<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub players: Option<Vec<DraftUser>>,
-    draft_rules: Option<String>,
+    draft_rules: DraftRules,
     draft_set: Option<String>,
-    pub current_player: u32,
+    pub current_player: Option<Thing>,
     turn_ticker: u32,
+    // TODO: Use enum here DraftState::{ACCEPTING_PLAYER, MIN_JOINED, MAX_JOINED, ONGOING, DONE}
     accepting_players: bool,
     pub current_phase: DraftPhase,
 }
@@ -52,28 +53,91 @@ impl DraftSession {
             max_num_players: form.max_num_players,
             selected_pokemon: Vec::new(),
             players: None,
-            draft_rules: Some(form.draft_rules),
+            current_phase: rules.starting_phase,
+            draft_rules: rules,
             draft_set: Some(form.draft_set),
-            current_player: 0,
+            current_player: None,
             turn_ticker: 0,
             accepting_players: true,
-            current_phase: rules.starting_phase,
         }
     }
 
-    pub fn get_names(&self) -> Vec<String> {
-        let mut names = Vec::new();
+    pub fn is_name_taken(&self, name: &str) -> bool {
         let players: &Vec<DraftUser> = match &self.players {
             Some(s) => s,
-            None => return names,
+            None => return false,
         };
+        let players_with_name = players.iter().filter(|&x| x.name == name).collect::<Vec<_>>();
 
-        for user in players {
-            // clonse for now, but maybe I shouldn't use String?
-            names.push(user.name.clone());
+        players_with_name.len() != 0
+    }
+
+    pub fn get_next_player_id(&self) -> (u32, Option<String>) {
+        if let Some(players) = &self.players {
+            let num_of_players = players.len() as u32;
+            let x = (self.turn_ticker + 1) % num_of_players;
+            let round = (self.turn_ticker + 1) / num_of_players;
+
+            let next_player_i = if round % 2 == 0 || self.draft_rules.turn_type == TurnType::RoundRobin {
+                x
+            } else {
+                num_of_players - (x + 1)
+            } as usize;
+
+            if let Some(player) = players.get(next_player_i) {
+                if let Some(t) = &player.id {
+                    return (self.turn_ticker + 1, Some(format!("{}", t.id)));
+                }
+            }
+        } 
+
+        (self.turn_ticker, None)
+    }
+
+    // TODO: Used enum Pick(u32) and Ban(u32) to track how long have for the round
+    pub fn get_next_phase(&self) -> DraftPhase {
+        let picks_per_round = self.draft_rules.picks_per_round as u32; 
+        let bans_per_round = self.draft_rules.bans_per_round as u32; 
+        let num_of_players = self.num_of_players();
+        let round = (self.turn_ticker + 1) / num_of_players;
+        let full_cycle = bans_per_round + picks_per_round;
+        let normalized_round = round % full_cycle;
+
+        println!("PPR: {picks_per_round}, BPR: {bans_per_round}, NoP: {num_of_players}, Round: {round}, NR: {normalized_round}, FC: {full_cycle}");
+
+        match self.draft_rules.starting_phase {
+            DraftPhase::Ban => {
+                let some_bool = (normalized_round + bans_per_round) < full_cycle;
+                println!("{some_bool}");
+                if (normalized_round + bans_per_round) < full_cycle {
+                    DraftPhase::Ban
+                } else {
+                    DraftPhase::Pick
+                }
+            },
+            DraftPhase::Pick => {
+                if (normalized_round + picks_per_round) < full_cycle {
+                    DraftPhase::Pick
+                } else {
+                    DraftPhase::Ban
+                }
+            }
         }
+    }
 
-        names
+    pub fn is_current_player(&self, id: &Thing) -> bool {
+        if let Some(ref t) = self.current_player {
+            return t == id
+        }
+        false
+    }
+
+    pub fn get_current_player_name(&self) -> Option<String> {
+        todo!()
+    }
+
+    pub fn draft_has_started(&self) -> bool {
+        !self.accepting_players
     }
 
     pub fn slots_available(&self) -> bool {
@@ -81,14 +145,6 @@ impl DraftSession {
             Some(p) => (p.len() as u16) < self.max_num_players && self.accepting_players,
             None => false,
         }
-    }
-
-    pub fn draft_has_started(&self) -> bool {
-        !self.accepting_players
-    }
-
-    pub fn is_current_player(&self, order: u32) -> bool {
-        self.current_player == order
     }
 
     pub fn num_of_players(&self) -> u32 {
@@ -119,11 +175,11 @@ pub struct DraftSessionCreateForm {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DraftUser {
-    id: Option<Thing>,
+    pub id: Option<Thing>,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     session: Option<Thing>,
-    pub pokemon_selected: Vec<u32>,
+    pub selected_pokemon: Vec<u32>,
     // find some crypto hash
     key_hash: i64,
     pub order_in_session: u32,
@@ -135,7 +191,7 @@ impl DraftUser {
             id: None,
             name: name,
             session: None,
-            pokemon_selected: Vec::new(),
+            selected_pokemon: Vec::new(),
             key_hash: key,
             order_in_session: order,
         }
@@ -146,7 +202,7 @@ impl DraftUser {
     }
 
     pub fn select_pokemon(&mut self, pk: u32) {
-        self.pokemon_selected.push(pk);
+        self.selected_pokemon.push(pk);
     }
 }
 
