@@ -58,6 +58,11 @@ def create_draft_session(set_id, rules_id, draft_name):
     else:
         return res.json()
 
+def check_draft_update(session_id):
+    draft_session_url = f"{API_URL}/draft_session/{session_id}/update"
+    res = requests.get(draft_session_url)
+    return res.json(), res.status_code
+
 def create_player(session, player_name):
     draft_session_url = f"{API_URL}/draft_session/{session}/create-user"
     post_data = {
@@ -166,6 +171,10 @@ def test_create_session_4_player_join_select_snake():
         "selected_pokemon": [5],
     }, f"{res_data}"
     print(f"Passed: {players[3]['name']} picking pokemon 5.")
+
+    res_data, status = check_draft_update(session)
+    assert status == 200, f"{res_data}"
+    assert res_data == {'current_phase': 'Pick', 'banned_pokemon': [1, 2, 3, 4, 5], 'current_player': 'Player 3', 'players': [{'name': 'Player 1', 'pokemon': []}, {'name': 'Player 2', 'pokemon': []}, {'name': 'Player 3', 'pokemon': []}, {'name': 'Player 4', 'pokemon': [5]}]}
 
 @test
 def test_create_session_3_player_join_select():

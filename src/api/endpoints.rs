@@ -427,7 +427,7 @@ pub async fn select_pokemon<'a>(
         selected_pokemon: &player.selected_pokemon[..]
     };
     let _updated: Option<Record> = db
-        .update((DRAFT_USER_TB, id))
+        .update(draft_user_id)
         .merge(update_data)
         .await
         .map_err(|e| NotFound(e.to_string()))?;
@@ -512,7 +512,8 @@ pub struct UpdateDraftSessionResponse {
 impl UpdateDraftSessionResponse {
     fn from(session: DraftSession) -> UpdateDraftSessionResponse {
         let current_player_name = session.get_current_player_name();
-        let players: Vec<DraftUser> = match session.players {
+        let (selected_pokemon, current_phase, players) = (session.selected_pokemon, session.current_phase, session.players);
+        let players: Vec<DraftUser> = match players {
             Some(p) => p,
             None => Vec::new(),
         };
@@ -529,8 +530,8 @@ impl UpdateDraftSessionResponse {
             .collect();
 
         UpdateDraftSessionResponse {
-            banned_pokemon: session.selected_pokemon,
-            current_phase: session.current_phase,
+            banned_pokemon: selected_pokemon,
+            current_phase: current_phase,
             current_player: current_player_name,
             players: player_data,
         }

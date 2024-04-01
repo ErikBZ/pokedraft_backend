@@ -129,7 +129,14 @@ impl DraftSession {
     }
 
     pub fn get_current_player_name(&self) -> Option<String> {
-        todo!()
+        if let Some(players) = &self.players {
+            for player in players {
+                if player.id == self.current_player {
+                    return Some(player.name.clone());
+                }
+            }
+        }
+        None
     }
 
     pub fn draft_has_started(&self) -> bool {
