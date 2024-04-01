@@ -105,7 +105,6 @@ impl DraftSession {
 
         match self.draft_rules.starting_phase {
             DraftPhase::Ban => {
-                let some_bool = (normalized_round + bans_per_round) < full_cycle;
                 if (normalized_round + bans_per_round) < full_cycle {
                     DraftPhase::Ban
                 } else {
