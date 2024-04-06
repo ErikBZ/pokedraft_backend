@@ -2,26 +2,48 @@
 extern crate surrealdb;
 use api::CORS;
 use surrealdb::engine::remote::ws::{Ws, Client};
-use surrealdb::opt::auth::Root;
+use surrealdb::opt::auth::{Root, Database};
 use surrealdb::Surreal;
 mod models;
 mod api;
 use api::endpoints;
+use serde::Deserialize;
 
-async fn init_db() -> Surreal<Client> {
-    let db = match Surreal::new::<Ws>("127.0.0.1:8000").await {
-        Err(_) => panic!("Unable to start connection to DB"),
+#[derive(Deserialize)]
+struct DBConfig {
+    surreal_addr: String,
+    surreal_username: String,
+    surreal_password: String,
+    surreal_namespace: String,
+    surreal_db_name: String,
+    surreal_db_user_type: DBUserType
+}
+
+#[derive(Deserialize)]
+enum DBUserType {
+    Root,
+    Database
+}
+
+async fn init_db(conf: DBConfig) -> Surreal<Client> {
+    let db = match Surreal::new::<Ws>(conf.surreal_addr).await {
         Ok(f) => f,
+        Err(e) => panic!("Unable to start connection to DB: {e}"),
     };
 
-    match db.signin(Root {username: "root", password: "root"}).await {
-        Err(_) => panic!("Unable to login to DB"),
-        Ok(_) => (),
-    }
-
-    match db.use_ns("test").use_db("test").await {
-        Err(_) => panic!("Unable to start namespace or database"),
-        Ok(_) => (),
+    match conf.surreal_db_user_type {
+        DBUserType::Root => {
+            db.signin(Root { username: &conf.surreal_username, password: &conf.surreal_password }).await.expect("Unable to log in with Root User");
+            db.use_ns(conf.surreal_namespace).use_db(conf.surreal_db_name).await.expect("Unable to start namespace or database connection");
+        },
+        DBUserType::Database => {
+            db.signin(Database {
+                username: &conf.surreal_username,
+                password: &conf.surreal_password,
+                namespace: &conf.surreal_namespace,
+                database: &conf.surreal_db_name
+            }).await.expect("Unable to log in with Databae User");
+        }
     }
 
     db
@@ -29,10 +51,13 @@ async fn init_db() -> Surreal<Client> {
 
 #[launch]
 async fn rocket() -> _ {
-    let db = init_db().await;
+    let rocket = rocket::build();
+    let figment = rocket.figment();
 
-    rocket::build()
-        .manage(db)
+    let config: DBConfig = figment.extract().expect("Unable to read surreal db configuration");
+    let db = init_db(config).await;
+
+    rocket.manage(db)
         .mount("/api/v1", routes![endpoints::get_pokemon])
         .mount("/api/v1", routes![endpoints::list_pokemon])
         .mount("/api/v1", routes![endpoints::get_pokemon_draft_set])

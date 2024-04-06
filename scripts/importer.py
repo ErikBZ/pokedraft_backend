@@ -1,5 +1,6 @@
 from surrealdb import Surreal
 import json
+import os
 
 def get_json():
     with open("scripts/pokemon_models.json") as f:
@@ -7,9 +8,12 @@ def get_json():
 
 async def main():
     raw_pokemon = get_json()
+    password = os.environ['ROCKET_SURREAL_PASSWORD']
     async with Surreal("ws://localhost:8000/rpc") as db:
+        # TODO: the root username and password can be custom
+        # load from some variable
         await db.signin({"user": "root", "pass": "root"})
-        await db.use("test", "test")
+        await db.use("dev", "pokedraft")
 
         # clear table first
         await db.delete("pokemon")
@@ -17,18 +21,19 @@ async def main():
 
         await db.delete("pokemon_draft_set")
         await db.delete("contains")
-        #await db.query("DEFINE INDEX unqiue_pokemon_in_list ON TABLE contains COLUMNS in, out, UNIQUE")
         await create_pokemon_lists(db)
 
         await db.delete("draft_rules")
         await create_draft_rules(db)
+        result = await db.query(f"DEFINE USER pokedraft_api ON DATABASE PASSWORD '{password}' ROLES OWNER;")
+        print(result)
 
 # TODO maybe create a fixed ID for the initial sets?
 async def save_pokemon_to_db(db, pokemon):
     for pk in pokemon:
         pk['evolves_from'] = 0 if pk["evolves_from"] == "" else int(pk["evolves_from"])
         pk['type2'] = "NONE" if pk['type2'] == "" else pk['type2'].upper()
-        await db.create("pokemon",
+        result = await db.create("pokemon",
             {
                 "id": f"pokemon:{pk['id']}",
                 "dex_id": int(pk['id']),
