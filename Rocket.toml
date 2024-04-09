@@ -2,11 +2,10 @@
 port = 8080
 surreal_username = "pokedraft_api"
 surreal_db_name = "pokedraft"
-surreal_addr="127.0.0.1:8000"
 surreal_db_user_type="Database"
 
 [debug]
-surreal_namespace= "dev"
+surreal_namespace = "dev"
 
 [release]
-surreal_namespace= "prod"
+surreal_namespace = "prod"

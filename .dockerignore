@@ -1,0 +1,6 @@
+/target
+
+.vscode
+.trunk
+
+scripts/env.sh

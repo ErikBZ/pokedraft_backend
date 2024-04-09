@@ -2,6 +2,7 @@ from surrealdb import Surreal
 import json
 import os
 
+ROOT_DB_PASSWORD="sadf9843jqlrbq43lbadf"
 def get_json():
     with open("scripts/pokemon_models.json") as f:
         return json.load(f)
@@ -9,10 +10,11 @@ def get_json():
 async def main():
     raw_pokemon = get_json()
     password = os.environ['ROCKET_SURREAL_PASSWORD']
-    async with Surreal("ws://localhost:8000/rpc") as db:
+    async with Surreal("ws://172.21.0.2:8000/rpc") as db:
         # TODO: the root username and password can be custom
         # load from some variable
-        await db.signin({"user": "root", "pass": "root"})
+        await db.signin({"user": "root", "pass": f"{ROOT_DB_PASSWORD}"})
+
         await db.use("dev", "pokedraft")
 
         # clear table first

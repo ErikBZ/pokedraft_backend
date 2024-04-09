@@ -42,7 +42,7 @@ async fn init_db(conf: DBConfig) -> Surreal<Client> {
                 password: &conf.surreal_password,
                 namespace: &conf.surreal_namespace,
                 database: &conf.surreal_db_name
-            }).await.expect("Unable to log in with Databae User");
+            }).await.expect("Unable to log in with Database User");
         }
     }
 
