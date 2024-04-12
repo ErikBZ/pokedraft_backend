@@ -6,6 +6,8 @@ surreal_db_user_type="Database"
 
 [debug]
 surreal_namespace = "dev"
+surreal_addr = "localhost:8000"
 
 [release]
 surreal_namespace = "prod"
+surreal_addr = "surrealdb:8000"

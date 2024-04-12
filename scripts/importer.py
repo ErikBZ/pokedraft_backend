@@ -1,33 +1,58 @@
+from asyncio import sleep
 from surrealdb import Surreal
 import json
 import os
+import requests
+import toml
 
-ROOT_DB_PASSWORD="sadf9843jqlrbq43lbadf"
 def get_json():
     with open("scripts/pokemon_models.json") as f:
         return json.load(f)
 
+# TODO: this should be better, and shouldn't just check the http endpoint
+async def wait_for_surreal(addr):
+    for i in range(10):
+        try:
+            resp = requests.get(f"http://{addr}", allow_redirects=False)
+            if resp.status_code == 307:
+                return True
+        except requests.exceptions.ConnectionError:
+            print("SurrealDB is not update yet. Waiting and trying again.")
+
+        await sleep(2)
+    return False
+
 async def main():
     raw_pokemon = get_json()
+    rocket_toml = toml.load("Rocket.toml")
+    profile = os.environ['ROCKET_PROFILE']
     password = os.environ['ROCKET_SURREAL_PASSWORD']
-    async with Surreal("ws://172.21.0.2:8000/rpc") as db:
-        # TODO: the root username and password can be custom
-        # load from some variable
-        await db.signin({"user": "root", "pass": f"{ROOT_DB_PASSWORD}"})
+    root_pwd = os.environ['ROOT_DB_PASSWORD']
+    namespace = rocket_toml[profile]['surreal_namespace']
+    addr = rocket_toml[profile]['surreal_addr']
+    username = rocket_toml['default']['surreal_username']
+    surreal_addr = f"ws://{addr}/rpc"
 
-        await db.use("dev", "pokedraft")
+    surreal_ready = await wait_for_surreal(addr)
+    if not surreal_ready:
+        print("SurrealDB did not start.")
+        return
 
-        # clear table first
-        await db.delete("pokemon")
+    async with Surreal(surreal_addr) as db:
+        await db.signin({"user": "root", "pass": f"{root_pwd}"})
+        await db.use(namespace, "pokedraft")
+        # Check if user exists, if yes exists
+        resp = await db.query("SELECT * FROM canary:surreal")
+        if len(resp[0]['result']) >= 1:
+            print("Canary found. Not moving forth with import.")
+            return
+
         await save_pokemon_to_db(db, raw_pokemon)
-
-        await db.delete("pokemon_draft_set")
-        await db.delete("contains")
         await create_pokemon_lists(db)
-
-        await db.delete("draft_rules")
         await create_draft_rules(db)
-        result = await db.query(f"DEFINE USER pokedraft_api ON DATABASE PASSWORD '{password}' ROLES OWNER;")
+
+        result = await db.create("canary", {"id": "surreal"})
+        result = await db.query(f"DEFINE USER {username} ON DATABASE PASSWORD '{password}' ROLES OWNER;")
         print(result)
 
 # TODO maybe create a fixed ID for the initial sets?
