@@ -1,8 +1,12 @@
-use rocket::fairing::{Fairing, Info, Kind};
 use rocket::http::Header;
 use rocket::{Request, Response};
+use rocket::fairing::{Fairing, Info, Kind};
 
-pub mod endpoints;
+pub mod pokemon;
+pub mod draft_set;
+pub mod draft_rules;
+pub mod draft_session;
+mod utils;
 
 pub struct CORS;
 

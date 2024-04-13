@@ -1,12 +1,14 @@
 #[macro_use] extern crate rocket;
 extern crate surrealdb;
-use api::CORS;
-use surrealdb::engine::remote::ws::{Ws, Client};
-use surrealdb::opt::auth::{Root, Database};
-use surrealdb::Surreal;
-mod models;
+
 mod api;
-use api::endpoints;
+mod models;
+use api::{draft_session, pokemon, draft_set, draft_rules, CORS};
+
+use surrealdb::Surreal;
+use surrealdb::opt::auth::{Root, Database};
+use surrealdb::engine::remote::ws::{Ws, Client};
+
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -58,20 +60,20 @@ async fn rocket() -> _ {
     let db = init_db(config).await;
 
     rocket.manage(db)
-        .mount("/api/v1", routes![endpoints::get_pokemon])
-        .mount("/api/v1", routes![endpoints::list_pokemon])
-        .mount("/api/v1", routes![endpoints::get_pokemon_draft_set])
-        .mount("/api/v1", routes![endpoints::list_pokemon_draft_set])
-        .mount("/api/v1", routes![endpoints::get_draft_rules])
-        .mount("/api/v1", routes![endpoints::list_draft_rules])
-        .mount("/api/v1", routes![endpoints::create_draft_rules])
-        .mount("/api/v1", routes![endpoints::get_draft_session])
-        .mount("/api/v1", routes![endpoints::create_draft_session])
-        .mount("/api/v1", routes![endpoints::option_draft_session])
-        .mount("/api/v1", routes![endpoints::update_draft_session])
-        .mount("/api/v1", routes![endpoints::create_user])
-        .mount("/api/v1", routes![endpoints::option_create_user])
-        .mount("/api/v1", routes![endpoints::select_pokemon])
-        .mount("/api/v1", routes![endpoints::option_select_pokemon])
+        .mount("/api/v1", routes![pokemon::get])
+        .mount("/api/v1", routes![pokemon::list])
+        .mount("/api/v1", routes![draft_set::get_pokemon_draft_set])
+        .mount("/api/v1", routes![draft_set::list_pokemon_draft_set])
+        .mount("/api/v1", routes![draft_rules::get_draft_rules])
+        .mount("/api/v1", routes![draft_rules::list_draft_rules])
+        .mount("/api/v1", routes![draft_rules::create_draft_rules])
+        .mount("/api/v1", routes![draft_session::get_draft_session])
+        .mount("/api/v1", routes![draft_session::create_draft_session])
+        .mount("/api/v1", routes![draft_session::option_draft_session])
+        .mount("/api/v1", routes![draft_session::update_draft_session])
+        .mount("/api/v1", routes![draft_session::create_user])
+        .mount("/api/v1", routes![draft_session::option_create_user])
+        .mount("/api/v1", routes![draft_session::select_pokemon])
+        .mount("/api/v1", routes![draft_session::option_select_pokemon])
         .attach(CORS)
 }
