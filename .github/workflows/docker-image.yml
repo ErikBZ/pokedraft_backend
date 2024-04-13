@@ -33,5 +33,5 @@ jobs:
         echo VERSION="v$VERSION"
         docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
         docker push $IMAGE_ID:$VERSION
-        [ "$BRANCH_NAME" == "main" ] && docker tag $IMAGE_NAME $IMAGE_ID:$VERSION && docker push $IMAGE_ID:latest
+        [ "$BRANCH_NAME" == "main" ] && docker tag $IMAGE_NAME $IMAGE_ID:latest && docker push $IMAGE_ID:latest
 
