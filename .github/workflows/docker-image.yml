@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: [ "main" ]
 env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   IMAGE_NAME: pokedraft-app
 jobs:
   push:
@@ -15,19 +16,22 @@ jobs:
       contents: read
     steps:
     - uses: actions/checkout@v3
+    - name: Get toml-cli
+      run: |
+        pip install toml-cli
     - name: Build the Docker image
       run: docker build . --file Dockerfile --tag $IMAGE_NAME --label "runnumber=${GITHUB_RUN_ID}"
     - name: Log in to repository
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
     - name: Push image
       run: |
+        VERSION=$(toml get --toml-path Cargo.toml package.version)
+        [[ "$BRANCH_NAME" != "main" ]] && VERSION="$VERSION-$BRANCH_NAME"
         IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME
         IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
-        VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-        [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
-        [ "$VERSION" == "main" ] && VERSION=latest
         echo IMAGE_ID=$IMAGE_ID
-        echo VERSION=$VERSION
+        echo VERSION="v$VERSION"
         docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
         docker push $IMAGE_ID:$VERSION
-        
+        [ "$BRANCH_NAME" == "main" ] && docker push $IMAGE_ID:latest
+
