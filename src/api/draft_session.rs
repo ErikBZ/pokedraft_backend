@@ -2,18 +2,20 @@ use crate::models::draft::{
     DraftPhase, DraftRules, DraftSession, DraftSessionCreateForm, DraftUser, DraftUserForm,
     DraftUserReturnData,
 };
-use crate::models::pokemon::{Pokemon, PokemonDraftSet, PokemonType};
 use crate::models::{hash_uuid, Record};
+use crate::models::pokemon::PokemonType;
+use crate::api::utils::{run_query, relate_objects};
 
-use rocket::response::status::NotFound;
-use rocket::serde::json::Json;
 use rocket::State;
+use rocket::serde::json::Json;
+use rocket::response::status::NotFound;
 
 use serde::{Deserialize, Serialize};
 
-use surrealdb::engine::remote::ws::Client;
-use surrealdb::sql::{Id, Thing};
 use surrealdb::Surreal;
+use surrealdb::sql::{Id, Thing};
+use surrealdb::engine::remote::ws::Client;
+
 use uuid::Uuid;
 
 const DRAFT_USER_RELATION: &str = "players";
@@ -22,121 +24,6 @@ const DRAFT_USER_TB: &str = "draft_user";
 
 fn to_json_err(str: &str) -> String {
     return format!("{{\"message\": \"{}\"}}", str)
-}
-
-#[get("/pokemon/get/<id>")]
-pub async fn get_pokemon(id: u64, db: &State<Surreal<Client>>) -> Option<Json<Pokemon>> {
-    let pokemon: Option<Pokemon> = match db.select(("pokemon", id)).await {
-        Ok(p) => p,
-        Err(e) => {
-            println!("{}", e);
-            return None;
-        }
-    };
-
-    match pokemon {
-        Some(p) => Some(Json(p)),
-        None => None,
-    }
-}
-
-#[get("/pokemon/get")]
-pub async fn list_pokemon(db: &State<Surreal<Client>>) -> Json<Vec<Pokemon>> {
-    let pokemon: Vec<Pokemon> = match db.select("pokemon").await {
-        Ok(p) => p,
-        Err(e) => {
-            println!("{}", e);
-            Vec::new()
-        }
-    };
-
-    Json(pokemon)
-}
-
-#[get("/draft_set")]
-pub async fn list_pokemon_draft_set(db: &State<Surreal<Client>>) -> Json<Vec<PokemonDraftSet>> {
-    let draft_sets = match db.select("pokemon_draft_set").await {
-        Ok(p) => p,
-        Err(e) => {
-            println!("{}", e);
-            Vec::new()
-        }
-    };
-
-    Json(draft_sets)
-}
-
-#[get("/draft_set/<id>?<detailed>")]
-pub async fn get_pokemon_draft_set(
-    id: &str,
-    detailed: bool,
-    db: &State<Surreal<Client>>,
-) -> Option<Json<PokemonDraftSet>> {
-    let query: String = if !detailed {
-        format!("SELECT name,id,array::sort(->contains.out.dex_id, asc) as pokemon.Ids FROM pokemon_draft_set:{id};")
-    } else {
-        format!("SELECT name,id,array::sort(->contains.out.*, asc) as pokemon.Stats FROM pokemon_draft_set:{id};")
-    };
-
-    match run_query(query, db).await {
-        Some(p) => Some(Json(p)),
-        None => None,
-    }
-}
-
-// TODO: Move these out and get draft rules based on name too?
-#[get("/draft_rules/<id>")]
-pub async fn get_draft_rules(id: &str, db: &State<Surreal<Client>>) -> Option<Json<DraftRules>> {
-    let rules: Option<DraftRules> = match db.select(("draft_rules", id)).await {
-        Ok(p) => p,
-        Err(e) => {
-            println!("{}", e);
-            None
-        }
-    };
-
-    match rules {
-        Some(r) => Some(Json(r)),
-        None => None,
-    }
-}
-
-#[get("/draft_rules")]
-pub async fn list_draft_rules(db: &State<Surreal<Client>>) -> Json<Vec<DraftRules>> {
-    let draft_sets = match db.select("draft_rules").await {
-        Ok(p) => p,
-        Err(e) => {
-            println!("{}", e);
-            Vec::new()
-        }
-    };
-
-    Json(draft_sets)
-}
-
-#[post("/draft_rules/create", format = "application/json", data = "<dr_form>")]
-pub async fn create_draft_rules(
-    dr_form: Json<DraftRules>,
-    db: &State<Surreal<Client>>,
-) -> Option<String> {
-    // should you even do this?
-    let draft_rules: DraftRules = dr_form.0;
-
-    let result: Vec<Record> = match db.create("draft_rules").content(draft_rules).await {
-        Ok(r) => r,
-        Err(e) => {
-            println!("{}", e);
-            return None;
-        }
-    };
-
-    let record = if result.len() > 0 {
-        format!("{{\"id\": \"{}\"}}", result[0].id.id)
-    } else {
-        "{\"message\": \"Could not create Draft Rule\"}".into()
-    };
-
-    Some(record)
 }
 
 #[get("/draft_session/<id>")]
@@ -449,40 +336,6 @@ fn get_current_player(players: Vec<DraftUser>, id: &Thing) -> Option<DraftUser> 
         }
     }
     None
-}
-
-// TODO actually do something useful with those errors
-// use map_error, maybe return result?
-async fn run_query<T>(query: String, db: &State<Surreal<Client>>) -> Option<T>
-where
-    for<'a> T: Deserialize<'a>,
-{
-    let resp: Option<T> = match db.query(query).await {
-        Ok(mut r) => match r.take(0) {
-            Ok(p) => p,
-            Err(e) => {
-                println!("{}", e);
-                None
-            }
-        },
-        Err(e) => {
-            println!("{}", e);
-            None
-        }
-    };
-
-    resp
-}
-
-async fn relate_objects(
-    db: &State<Surreal<Client>>,
-    obj_in: &Thing,
-    obj_out: &Thing,
-    relation: &str,
-) -> Result<(), NotFound<String>> {
-    let query = format!("RELATE {}->{}->{};", obj_in, relation, obj_out);
-    let _ = db.query(query).await.map_err(|e| NotFound(e.to_string()));
-    Ok(())
 }
 
 // structs
