@@ -11,7 +11,7 @@ def test(func):
         return func(*args, **kwargs)
     return wrapper
 
-LOCAL_URL = "http://localhost:8080"
+LOCAL_URL = "http://172.21.0.4:8080"
 API_URL = f"{LOCAL_URL}/api/v1"
 
 def get_draft_obj_id(name, obj):
@@ -117,6 +117,10 @@ def test_create_session_4_player_join_select_snake():
             print(f"Unable to  create User: {name} in Session: {session}")
             return False
 
+    for player in players:
+        # TODO: Set Ready
+        print("hi")
+
     res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[0])
     assert status == 200, f"{res_data}"
     assert res_data == {
@@ -178,11 +182,81 @@ def test_create_session_4_player_join_select_snake():
 
 @test
 def test_create_session_3_player_join_select():
-    pass
+    session = create_draft_session(DRAFT_DEBUG_SET_ID, RULE_NUZLOCKE_SNAKE_ID, "TEST 1")
 
-@test
-def test_create_session_2_player_join_select():
-    pass
+    if session == "":
+        return
+    else:
+        session = session['id']
+
+    players = []
+
+    print("Creating Players")
+    for i in range(3):
+        name = f"Player {i + 1}" 
+        player = create_player(session, name)
+
+        if player != "":
+            players.append(player)
+            print(f"Created User: {name} {player['user_id']} in Session: {session}")
+        else:
+            print(f"Unable to  create User: {name} in Session: {session}")
+            return False
+    
+    for player in players:
+        # TODO: Set Ready
+        print("hi")
+
+    res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[0])
+    assert status == 200, f"{res_data}"
+    assert res_data == {
+        "phase": "Ban",
+        "banned_pokemon": [1],
+        "selected_pokemon": [],
+    }, f"{res_data}"
+    print(f"Passed: {players[0]['name']} banning pokemon 1.")
+
+    res_data, status = player_ban_pokemon(session, players[1], DEBUG_POKEMON_SET[1])
+    assert status == 200, f"{res_data}"
+    assert res_data == {
+        "phase": "Ban",
+        "banned_pokemon": [1, 2],
+        "selected_pokemon": [],
+    }, f"{res_data}"
+    print(f"Passed: {players[1]['name']} banning pokemon 2.")
+
+    res_data, status = player_ban_pokemon(session, players[2], DEBUG_POKEMON_SET[2])
+    assert status == 200, f"{res_data}"
+    assert res_data == {
+        "phase": "Ban",
+        "banned_pokemon": [1, 2, 3],
+        "selected_pokemon": [],
+    }, f"{res_data}"
+    print(f"Passed: {players[2]['name']} banning pokemon 3.")
+
+    res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[3])
+    assert status == 404, f"{res_data}"
+    assert res_data == { "message": "Current action not allowed" }, f"{res_data}"
+    print(f"Passed: {players[0]['name']} failing to pick pokemon 4.")
+
+    res_data, status = player_pick_pokemon(session, players[0], DEBUG_POKEMON_SET[3])
+    assert status == 404, f"{res_data}"
+    assert res_data == { "message": "It is not your turn" }, f"{res_data}"
+    print(f"Passed: {players[0]['name']} failing to pick pokemon 4.")
+
+    res_data, status = player_pick_pokemon(session, players[2], DEBUG_POKEMON_SET[3])
+    assert status == 200, f"{res_data}"
+    assert res_data == {
+        "phase": "Pick",
+        "banned_pokemon": [1, 2, 3, 4],
+        "selected_pokemon": [5],
+    }, f"{res_data}"
+    print(f"Passed: {players[3]['name']} picking pokemon 4.")
+
+    res_data, status = check_draft_update(session)
+    assert status == 200, f"{res_data}"
+    assert res_data == {'current_phase': 'Pick', 'banned_pokemon': [1, 2, 3, 4], 'current_player': 'Player 3', 'players': [{'name': 'Player 1', 'pokemon': []}, {'name': 'Player 2', 'pokemon': []}, {'name': 'Player 3', 'pokemon': [4]}]}
+
 
 @test
 def test_create_session_1_player_join_select():
@@ -193,9 +267,8 @@ def extra():
 
 def run_tests():
     test_create_session_4_player_join_select_snake()
-    test_create_session_1_player_join_select()
-    test_create_session_2_player_join_select()
     test_create_session_3_player_join_select()
+    test_create_session_1_player_join_select()
 
 if __name__ == "__main__":
     run_tests()

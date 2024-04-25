@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+pub enum DraftState {
+    Open,               // Starting value. Allows players to join
+    AwaitingConfirm,    // Waiting for players to ready up
+    Ready,              // All players have listed themselves as ready
+    InProgress,         // No more players may join, Pick/Bans in progress
+    Ended               // Pick/Bans are done. All pokemon have been chosen
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 #[warn(dead_code)]
 pub enum DraftPhase {
     Pick,
@@ -41,6 +50,7 @@ pub struct DraftSession {
     turn_ticker: u32,
     // TODO: Use enum here DraftState::{ACCEPTING_PLAYER, MIN_JOINED, MAX_JOINED, ONGOING, DONE}
     accepting_players: bool,
+    pub draft_state: DraftState,
     pub current_phase: DraftPhase,
 }
 
@@ -58,6 +68,7 @@ impl DraftSession {
             draft_set: Some(form.draft_set),
             current_player: None,
             turn_ticker: 0,
+            draft_state: DraftState::Open,
             accepting_players: true,
         }
     }
@@ -182,6 +193,7 @@ pub struct DraftUser {
     // find some crypto hash
     key_hash: i64,
     pub order_in_session: u32,
+    pub ready: bool,
 }
 
 impl DraftUser {
@@ -193,6 +205,7 @@ impl DraftUser {
             selected_pokemon: Vec::new(),
             key_hash: key,
             order_in_session: order,
+            ready: false
         }
     }
 
@@ -233,3 +246,4 @@ impl DraftUserReturnData {
 pub struct DraftUserForm {
     pub name: String,
 }
+

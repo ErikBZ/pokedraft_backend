@@ -1,6 +1,6 @@
 use crate::models::draft::{
     DraftPhase, DraftRules, DraftSession, DraftSessionCreateForm, DraftUser, DraftUserForm,
-    DraftUserReturnData,
+    DraftUserReturnData, DraftState
 };
 use crate::models::{hash_uuid, Record};
 use crate::models::pokemon::PokemonType;
@@ -91,6 +91,37 @@ pub async fn create_draft_session(
     Some(record)
 }
 
+#[post("/draft_session/<id>/ready",
+    format = "application/json",
+    data = "<user_form>"
+)]
+pub async fn toggle_ready(
+    id: &str,
+    user_form: Json<ReadyDraftUserForm>,
+    db: &State<Surreal<Client>>
+) -> Result<String, NotFound<String>> {
+    let query =
+        format!("SELECT *,(SELECT * from ->{DRAFT_USER_RELATION}.out ORDER BY order_in_session ASC) as players FROM draft_session:{id};");
+
+    let session: DraftSession = match run_query(query, db).await {
+        Some(s) => s,
+        None => return Err(NotFound("Session not found".into())),
+    };
+
+    if session.num_of_players() < session.min_num_players as u32 {
+        // TODO: Set error message
+        return Err(NotFound(to_json_err("")));
+    }
+
+    if session.draft_state == DraftState::InProgress ||
+       session.draft_state == DraftState::Ended {
+        // TODO: Set error message
+        return Err(NotFound(to_json_err("")));
+    }
+
+    Ok("All good".to_string())
+}
+
 #[get("/draft_session/<id>/update")]
 pub async fn update_draft_session(
     id: &str,
@@ -110,6 +141,7 @@ pub async fn update_draft_session(
 
 #[options("/draft_session/<id>/create-user")]
 pub fn option_create_user<'a>(id: &str) -> &'a str {
+    let _id = id;
     "Ok"
 }
 
@@ -132,6 +164,10 @@ pub async fn create_user(
         Some(s) => s,
         None => return Err(NotFound(to_json_err("Session not found"))),
     };
+
+    if session.draft_state != DraftState::Open {
+        return Err(NotFound(to_json_err("Draft is no longer accepting players.")))
+    }
 
     if session.is_name_taken(&new_username) {
         return Err(NotFound(to_json_err("Username already in use")));
@@ -170,10 +206,12 @@ pub async fn create_user(
         accepting_players: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         current_player: Option<Thing>,
+        draft_state: DraftState,
     }
     let mut update_data = UpdateData {
         accepting_players: true,
         current_player: None,
+        draft_state: DraftState::Open,
     };
 
     let user_id = format!("{}", &new_records[0].id.id);
@@ -185,6 +223,7 @@ pub async fn create_user(
     // TODO might need to do smarter casting of u16 to u32
     if session.num_of_players() + 1 >= (session.max_num_players as u32) {
         update_data.accepting_players = false;
+        update_data.draft_state = DraftState::AwaitingConfirm;
     }
 
     let _updated: Option<Record> = db
@@ -207,6 +246,7 @@ pub async fn create_user(
 
 #[options("/draft_session/<id>/select-pokemon")]
 pub fn option_select_pokemon<'a>(id: &str) -> &'a str {
+    let _id = id;
     "Ok"
 }
 
@@ -379,6 +419,7 @@ impl UpdateDraftSessionResponse {
             .map(|element| PlayerData {
                 name: element.name.clone(),
                 pokemon: element.selected_pokemon.clone(),
+                ready: element.ready
             })
             .collect();
 
@@ -395,6 +436,7 @@ impl UpdateDraftSessionResponse {
 pub struct PlayerData {
     name: String,
     pokemon: Vec<u32>,
+    ready: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -404,3 +446,9 @@ pub struct PokemonSubData<'a> {
     type2: PokemonType,
     id: u32,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReadyDraftUserForm {
+    user_id: String
+}
+
