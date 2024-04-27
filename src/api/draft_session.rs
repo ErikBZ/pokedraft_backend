@@ -100,6 +100,7 @@ pub async fn toggle_ready(
     user_form: Json<ReadyDraftUserForm>,
     db: &State<Surreal<Client>>
 ) -> Result<String, NotFound<String>> {
+    let new_username = user_form.0.user_id;
     let query =
         format!("SELECT *,(SELECT * from ->{DRAFT_USER_RELATION}.out ORDER BY order_in_session ASC) as players FROM draft_session:{id};");
 
@@ -108,16 +109,38 @@ pub async fn toggle_ready(
         None => return Err(NotFound("Session not found".into())),
     };
 
-    if session.num_of_players() < session.min_num_players as u32 {
-        // TODO: Set error message
-        return Err(NotFound(to_json_err("")));
-    }
-
     if session.draft_state == DraftState::InProgress ||
        session.draft_state == DraftState::Ended {
         // TODO: Set error message
-        return Err(NotFound(to_json_err("")));
+        return Err(NotFound(to_json_err("Can't ready when the draft is in progress.")));
     }
+
+    // Get the user
+    let id = Thing {
+        tb: "draft_user".into(),
+        id: Id::String(new_username),
+    };
+    let players = match session.players {
+        Some(p) => p,
+        None => return Err(NotFound(to_json_err("Can't ready when the draft is in progress."))),
+    };
+
+    let user = match get_current_player(players, &id) {
+        Some(u) => u,
+        None => return Err(NotFound(to_json_err("Can't ready when the draft is in progress."))),
+    };
+
+    let ready = !user.ready;
+    #[derive(Serialize)]
+    struct UpdateData {
+        ready: bool
+    }
+    let update = UpdateData{ ready: ready };
+    let _updated: Option<Record> = db
+        .update((DRAFT_USER_TB, id))
+        .merge(update)
+        .await
+        .map_err(|e| NotFound(e.to_string()))?;
 
     Ok("All good".to_string())
 }
@@ -367,6 +390,7 @@ pub async fn select_pokemon<'a>(
     }))
 }
 
+// TODO: Probably a nicer awy to do this
 fn get_current_player(players: Vec<DraftUser>, id: &Thing) -> Option<DraftUser> {
     for player in players {
         if let Some(ref t) = player.id {
