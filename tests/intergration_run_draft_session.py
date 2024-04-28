@@ -101,6 +101,14 @@ def toggle_user(session, player):
     res = requests.post(toggle_url, json=post_data)
     return res.json(), res.status_code
 
+def start_session(session, player):
+    toggle_url = f"{API_URL}/draft_session/{session}/start"
+    post_data = {
+        "user_id": player['user_id']
+    }
+    res = requests.post(toggle_url, json=post_data)
+    return res.json(), res.status_code
+
 # TESTS
 @test
 def test_create_session_4_player_join_select_snake():
@@ -132,6 +140,16 @@ def test_create_session_4_player_join_select_snake():
         }
         res = requests.post(toggle_url, json=post_data)
         assert res.status_code == 200
+
+    res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[0])
+    assert status == 404, f"{status}"
+    assert res_data == {
+            "message": "Draft has not yet started"
+    }, f"{res_data}"
+    print(f"Passed: Tried banning pokemon before draft has started")
+
+    res_data, status = start_session(session, players[0])
+    assert status == 200, f"{res_data}"
 
     res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[0])
     assert status == 200, f"{res_data}"

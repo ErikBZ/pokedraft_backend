@@ -4,7 +4,6 @@ use surrealdb::sql::Thing;
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 pub enum DraftState {
     Open,               // Starting value. Allows players to join
-    AwaitingConfirm,    // Waiting for players to ready up
     Ready,              // All players have listed themselves as ready
     InProgress,         // No more players may join, Pick/Bans in progress
     Ended               // Pick/Bans are done. All pokemon have been chosen
@@ -151,7 +150,7 @@ impl DraftSession {
     }
 
     pub fn draft_has_started(&self) -> bool {
-        !self.accepting_players
+        self.draft_state == DraftState::InProgress
     }
 
     pub fn slots_available(&self) -> bool {

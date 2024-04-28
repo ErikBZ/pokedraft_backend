@@ -76,5 +76,6 @@ async fn rocket() -> _ {
         .mount("/api/v1", routes![draft_session::select_pokemon])
         .mount("/api/v1", routes![draft_session::option_select_pokemon])
         .mount("/api/v1", routes![draft_session::toggle_ready])
+        .mount("/api/v1", routes![draft_session::start])
         .attach(CORS)
 }

@@ -127,7 +127,11 @@ pub async fn toggle_ready(
 
     let mut all_players_ready = true;
     for player in players.iter() {
-        all_players_ready = player.ready & all_players_ready
+        if let Some(p_id) = &player.id {
+            if p_id != &user_id {
+                all_players_ready = player.ready & all_players_ready
+            }
+        }
     };
 
     let user = match get_current_player(players, &user_id) {
@@ -137,18 +141,19 @@ pub async fn toggle_ready(
 
     let ready = !user.ready;
     all_players_ready = all_players_ready & ready;
-    let mut new_draft_state = session.draft_state;
-    if all_players_ready {
-        new_draft_state = DraftState::Ready;
-    }
+    let new_draft_state = if all_players_ready {
+        DraftState::Ready
+    } else {
+        DraftState::Open
+    };
 
     #[derive(Serialize)]
     struct UpdateData {
         ready: bool
     }
-    let update = UpdateData{ ready: ready };
+    let update = UpdateData{ ready };
     let _updated: Option<Record> = db
-        .update((DRAFT_USER_TB, id))
+        .update((DRAFT_USER_TB, user_id))
         .merge(update)
         .await
         .map_err(|e| NotFound(e.to_string()))?;
@@ -158,6 +163,7 @@ pub async fn toggle_ready(
         draft_state: DraftState
     }
     let update = SessionUpdateData{ draft_state: new_draft_state };
+    // Maybe use set to session_id so that it's easier to tell what the id is for
     let _updated: Option<Record> = db
         .update((DRAFT_SESSION, id))
         .merge(update)
@@ -165,6 +171,29 @@ pub async fn toggle_ready(
         .map_err(|e| NotFound(e.to_string()))?;
 
     Ok(to_json_msg("All good"))
+}
+
+#[post("/draft_session/<id>/start",
+    format = "application/json",
+    data = "<user_form>"
+)]
+pub async fn start(
+    id: &str,
+    user_form: Json<ReadyDraftUserForm>,
+    db: &State<Surreal<Client>>
+) -> Result<String, NotFound<String>> {
+    #[derive(Serialize)]
+    struct SessionUpdateData {
+        draft_state: DraftState
+    }
+    let update = SessionUpdateData{ draft_state: DraftState::InProgress };
+
+    let _updated: Option<Record> = db
+        .update((DRAFT_SESSION, id))
+        .merge(update)
+        .await
+        .map_err(|e| NotFound(e.to_string()))?;
+    Ok(to_json_msg("All Good"))
 }
 
 #[get("/draft_session/<id>/update")]
@@ -211,7 +240,7 @@ pub async fn create_user(
         None => return Err(NotFound(to_json_msg("Session not found"))),
     };
 
-    if session.num_of_players() < (session.max_num_players as u32) &&
+    if session.num_of_players() >= (session.max_num_players as u32) &&
     (session.draft_state != DraftState::InProgress || session.draft_state != DraftState::Ended)
     {
         return Err(NotFound(to_json_msg("Draft is no longer accepting players.")))
@@ -271,8 +300,7 @@ pub async fn create_user(
     // TODO might need to do smarter casting of u16 to u32
     if session.num_of_players() + 1 >= (session.max_num_players as u32) {
         update_data.accepting_players = false;
-        update_data.draft_state = DraftState::AwaitingConfirm;
-    }
+    };
 
     let _updated: Option<Record> = db
         .update((DRAFT_SESSION, id))
