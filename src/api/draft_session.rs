@@ -22,7 +22,7 @@ const DRAFT_USER_RELATION: &str = "players";
 const DRAFT_SESSION: &str = "draft_session";
 const DRAFT_USER_TB: &str = "draft_user";
 
-fn to_json_err(str: &str) -> String {
+fn to_json_msg(str: &str) -> String {
     return format!("{{\"message\": \"{}\"}}", str)
 }
 
@@ -112,7 +112,7 @@ pub async fn toggle_ready(
     if session.draft_state == DraftState::InProgress ||
        session.draft_state == DraftState::Ended {
         // TODO: Set error message
-        return Err(NotFound(to_json_err("Can't ready when the draft is in progress.")));
+        return Err(NotFound(to_json_msg("Can't ready when the draft is in progress.")));
     }
 
     // Get the user
@@ -122,12 +122,12 @@ pub async fn toggle_ready(
     };
     let players = match session.players {
         Some(p) => p,
-        None => return Err(NotFound(to_json_err("Can't ready when the draft is in progress."))),
+        None => return Err(NotFound(to_json_msg("Can't ready when the draft is in progress."))),
     };
 
     let user = match get_current_player(players, &id) {
         Some(u) => u,
-        None => return Err(NotFound(to_json_err("Can't ready when the draft is in progress."))),
+        None => return Err(NotFound(to_json_msg("Can't ready when the draft is in progress."))),
     };
 
     let ready = !user.ready;
@@ -142,7 +142,7 @@ pub async fn toggle_ready(
         .await
         .map_err(|e| NotFound(e.to_string()))?;
 
-    Ok("All good".to_string())
+    Ok(to_json_msg("All good"))
 }
 
 #[get("/draft_session/<id>/update")]
@@ -185,19 +185,19 @@ pub async fn create_user(
     // Guarding Checks
     let session: DraftSession = match run_query(query, db).await {
         Some(s) => s,
-        None => return Err(NotFound(to_json_err("Session not found"))),
+        None => return Err(NotFound(to_json_msg("Session not found"))),
     };
 
     if session.draft_state != DraftState::Open {
-        return Err(NotFound(to_json_err("Draft is no longer accepting players.")))
+        return Err(NotFound(to_json_msg("Draft is no longer accepting players.")))
     }
 
     if session.is_name_taken(&new_username) {
-        return Err(NotFound(to_json_err("Username already in use")));
+        return Err(NotFound(to_json_msg("Username already in use")));
     }
 
     if !session.slots_available() {
-        return Err(NotFound(to_json_err("No slots available to join")));
+        return Err(NotFound(to_json_msg("No slots available to join")));
     }
 
     // Create User
@@ -209,7 +209,7 @@ pub async fn create_user(
         Ok(r) => r,
         Err(e) => {
             println!("{}", e);
-            return Err(NotFound(to_json_err("Could not create record")));
+            return Err(NotFound(to_json_msg("Could not create record")));
         }
     };
 
@@ -301,18 +301,18 @@ pub async fn select_pokemon<'a>(
     };
 
     if !session.draft_has_started() {
-        return Err(NotFound(to_json_err("Draft has not yet started")));
+        return Err(NotFound(to_json_msg("Draft has not yet started")));
     }
     if session.is_pokemon_chosen(&select_pokemon.pokemon_id) {
         return Err(NotFound(
-            to_json_err("Pokemon cannot be selected. It's either banned or has already been selected."),
+            to_json_msg("Pokemon cannot be selected. It's either banned or has already been selected."),
         ));
     }
     if select_pokemon.action != session.current_phase {
-        return Err(NotFound(to_json_err("Current action not allowed")));
+        return Err(NotFound(to_json_msg("Current action not allowed")));
     }
     if !session.is_current_player(&draft_user_id) {
-        return Err(NotFound(to_json_err("It is not your turn")));
+        return Err(NotFound(to_json_msg("It is not your turn")));
     };
 
     // Get Next Player Thing in session
@@ -329,18 +329,18 @@ pub async fn select_pokemon<'a>(
     let players = match players {
         Some(p) => p,
         None => {
-            return Err(NotFound(to_json_err("Nothing")))
+            return Err(NotFound(to_json_msg("Nothing")))
         }
     };
     let mut player = match get_current_player(players, &draft_user_id) {
         Some(p) => p,
         None => {
-            return Err(NotFound(to_json_err("User not in session.")))
+            return Err(NotFound(to_json_msg("User not in session.")))
         }
     };
 
     if !player.check_key_hash(key_hash) {
-        return Err(NotFound(to_json_err("Access Denied")));
+        return Err(NotFound(to_json_msg("Access Denied")));
     };
 
     if let DraftPhase::Pick = select_pokemon.action {
