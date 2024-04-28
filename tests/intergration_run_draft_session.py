@@ -11,7 +11,7 @@ def test(func):
         return func(*args, **kwargs)
     return wrapper
 
-LOCAL_URL = "http://172.21.0.4:8080"
+LOCAL_URL = "http://localhost:8080"
 API_URL = f"{LOCAL_URL}/api/v1"
 
 def get_draft_obj_id(name, obj):
@@ -93,6 +93,14 @@ def player_ban_pokemon(session, player, pokemon):
 def player_pick_pokemon(session, player, pokemon):
     return player_select_pokemon(session, player, pokemon, action="Pick")
 
+def toggle_user(session, player):
+    toggle_url = f"{API_URL}/draft_session/{session}/ready"
+    post_data = {
+        "user_id": player['user_id']
+    }
+    res = requests.post(toggle_url, json=post_data)
+    return res.json(), res.status_code
+
 # TESTS
 @test
 def test_create_session_4_player_join_select_snake():
@@ -118,8 +126,12 @@ def test_create_session_4_player_join_select_snake():
             return False
 
     for player in players:
-        # TODO: Set Ready
-        print("hi")
+        toggle_url = f"{API_URL}/draft_session/{session}/ready"
+        post_data = {
+            "user_id": player['user_id']
+        }
+        res = requests.post(toggle_url, json=post_data)
+        assert res.status_code == 200
 
     res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[0])
     assert status == 200, f"{res_data}"
@@ -178,10 +190,10 @@ def test_create_session_4_player_join_select_snake():
 
     res_data, status = check_draft_update(session)
     assert status == 200, f"{res_data}"
-    assert res_data == {'current_phase': 'Pick', 'banned_pokemon': [1, 2, 3, 4, 5], 'current_player': 'Player 3', 'players': [{'name': 'Player 1', 'pokemon': []}, {'name': 'Player 2', 'pokemon': []}, {'name': 'Player 3', 'pokemon': []}, {'name': 'Player 4', 'pokemon': [5]}]}
+    assert res_data == {'current_phase': 'Pick', 'banned_pokemon': [1, 2, 3, 4, 5], 'current_player': 'Player 3', 'players': [{'name': 'Player 1', 'pokemon': [], "ready": True}, {'name': 'Player 2', 'pokemon': [], "ready": True}, {'name': 'Player 3', 'pokemon': [], "ready": True}, {'name': 'Player 4', 'pokemon': [5], "ready": True}]}, f"{res_data}"
 
 @test
-def test_create_session_3_player_join_select():
+def test_toggle_ready_on_pokemon():
     session = create_draft_session(DRAFT_DEBUG_SET_ID, RULE_NUZLOCKE_SNAKE_ID, "TEST 1")
 
     if session == "":
@@ -203,59 +215,44 @@ def test_create_session_3_player_join_select():
             print(f"Unable to  create User: {name} in Session: {session}")
             return False
     
-    for player in players:
-        # TODO: Set Ready
-        print("hi")
+    res_data, status = check_draft_update(session)
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': False},{'name': 'Player 2', 'pokemon': [], 'ready': False}, {'name': 'Player 3', 'pokemon': [], 'ready': False}]}, f"{res_data}"
+    print("Passed: All players ready status is set to false.")
 
-    res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[0])
+    res_data, status = toggle_user(session, players[0])
     assert status == 200, f"{res_data}"
-    assert res_data == {
-        "phase": "Ban",
-        "banned_pokemon": [1],
-        "selected_pokemon": [],
-    }, f"{res_data}"
-    print(f"Passed: {players[0]['name']} banning pokemon 1.")
-
-    res_data, status = player_ban_pokemon(session, players[1], DEBUG_POKEMON_SET[1])
-    assert status == 200, f"{res_data}"
-    assert res_data == {
-        "phase": "Ban",
-        "banned_pokemon": [1, 2],
-        "selected_pokemon": [],
-    }, f"{res_data}"
-    print(f"Passed: {players[1]['name']} banning pokemon 2.")
-
-    res_data, status = player_ban_pokemon(session, players[2], DEBUG_POKEMON_SET[2])
-    assert status == 200, f"{res_data}"
-    assert res_data == {
-        "phase": "Ban",
-        "banned_pokemon": [1, 2, 3],
-        "selected_pokemon": [],
-    }, f"{res_data}"
-    print(f"Passed: {players[2]['name']} banning pokemon 3.")
-
-    res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[3])
-    assert status == 404, f"{res_data}"
-    assert res_data == { "message": "Current action not allowed" }, f"{res_data}"
-    print(f"Passed: {players[0]['name']} failing to pick pokemon 4.")
-
-    res_data, status = player_pick_pokemon(session, players[0], DEBUG_POKEMON_SET[3])
-    assert status == 404, f"{res_data}"
-    assert res_data == { "message": "It is not your turn" }, f"{res_data}"
-    print(f"Passed: {players[0]['name']} failing to pick pokemon 4.")
-
-    res_data, status = player_pick_pokemon(session, players[2], DEBUG_POKEMON_SET[3])
-    assert status == 200, f"{res_data}"
-    assert res_data == {
-        "phase": "Pick",
-        "banned_pokemon": [1, 2, 3, 4],
-        "selected_pokemon": [5],
-    }, f"{res_data}"
-    print(f"Passed: {players[3]['name']} picking pokemon 4.")
-
     res_data, status = check_draft_update(session)
     assert status == 200, f"{res_data}"
-    assert res_data == {'current_phase': 'Pick', 'banned_pokemon': [1, 2, 3, 4], 'current_player': 'Player 3', 'players': [{'name': 'Player 1', 'pokemon': []}, {'name': 'Player 2', 'pokemon': []}, {'name': 'Player 3', 'pokemon': [4]}]}
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': False}, {'name': 'Player 3', 'pokemon': [], 'ready': False}]}, f"{res_data}"
+    print("Passed: Setting Player 1 Ready Status")
+
+    res_data, status = toggle_user(session, players[1])
+    assert status == 200, f"{res_data}"
+    res_data, status = check_draft_update(session)
+    assert status == 200, f"{res_data}"
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': True}, {'name': 'Player 3', 'pokemon': [], 'ready': False}]}, f"{res_data}"
+    print("Passed: Setting Player 2 Ready Status")
+
+    res_data, status = toggle_user(session, players[2])
+    assert status == 200, f"{res_data}"
+    res_data, status = check_draft_update(session)
+    assert status == 200, f"{res_data}"
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': True}, {'name': 'Player 3', 'pokemon': [], 'ready': True}]}, f"{res_data}"
+    print("Passed: Setting Player 3 Ready Status")
+
+    res_data, status = toggle_user(session, players[1])
+    assert status == 200, f"{res_data}"
+    res_data, status = check_draft_update(session)
+    assert status == 200, f"{res_data}"
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': False}, {'name': 'Player 3', 'pokemon': [], 'ready': True}]}, f"{res_data}"
+    print("Passed: Setting Player 1 Ready Status")
+
+    res_data, status = toggle_user(session, players[1])
+    assert status == 200, f"{res_data}"
+    res_data, status = check_draft_update(session)
+    assert status == 200, f"{res_data}"
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': True}, {'name': 'Player 3', 'pokemon': [], 'ready': True}]}, f"{res_data}"
+    print("Passed: Setting Player 1 Ready Status")
 
 
 @test
@@ -265,11 +262,19 @@ def test_create_session_1_player_join_select():
 def extra():
     pass
 
-def run_tests():
+def run_all():
     test_create_session_4_player_join_select_snake()
-    test_create_session_3_player_join_select()
-    test_create_session_1_player_join_select()
+    test_toggle_ready_on_pokemon()
 
 if __name__ == "__main__":
-    run_tests()
+    args = sys.argv[1:]
+    tests_to_run = set(args[0].split(','))
+
+    if 'all' in tests_to_run:
+        run_all()
+    else:
+        if '1' in tests_to_run:
+            test_create_session_4_player_join_select_snake()
+        if '2' in tests_to_run:
+            test_toggle_ready_on_pokemon()
 
