@@ -116,7 +116,7 @@ pub async fn toggle_ready(
     }
 
     // Get the user
-    let id = Thing {
+    let user_id = Thing {
         tb: "draft_user".into(),
         id: Id::String(new_username),
     };
@@ -125,12 +125,23 @@ pub async fn toggle_ready(
         None => return Err(NotFound(to_json_msg("Can't ready when the draft is in progress."))),
     };
 
-    let user = match get_current_player(players, &id) {
+    let mut all_players_ready = true;
+    for player in players.iter() {
+        all_players_ready = player.ready & all_players_ready
+    };
+
+    let user = match get_current_player(players, &user_id) {
         Some(u) => u,
         None => return Err(NotFound(to_json_msg("Can't ready when the draft is in progress."))),
     };
 
     let ready = !user.ready;
+    all_players_ready = all_players_ready & ready;
+    let mut new_draft_state = session.draft_state;
+    if all_players_ready {
+        new_draft_state = DraftState::Ready;
+    }
+
     #[derive(Serialize)]
     struct UpdateData {
         ready: bool
@@ -138,6 +149,17 @@ pub async fn toggle_ready(
     let update = UpdateData{ ready: ready };
     let _updated: Option<Record> = db
         .update((DRAFT_USER_TB, id))
+        .merge(update)
+        .await
+        .map_err(|e| NotFound(e.to_string()))?;
+
+    #[derive(Serialize)]
+    struct SessionUpdateData {
+        draft_state: DraftState
+    }
+    let update = SessionUpdateData{ draft_state: new_draft_state };
+    let _updated: Option<Record> = db
+        .update((DRAFT_SESSION, id))
         .merge(update)
         .await
         .map_err(|e| NotFound(e.to_string()))?;
@@ -162,6 +184,7 @@ pub async fn update_draft_session(
     Ok(Json(resp))
 }
 
+// TODO: Change this to `join`
 #[options("/draft_session/<id>/create-user")]
 pub fn option_create_user<'a>(id: &str) -> &'a str {
     let _id = id;
@@ -188,7 +211,9 @@ pub async fn create_user(
         None => return Err(NotFound(to_json_msg("Session not found"))),
     };
 
-    if session.draft_state != DraftState::Open {
+    if session.num_of_players() < (session.max_num_players as u32) &&
+    (session.draft_state != DraftState::InProgress || session.draft_state != DraftState::Ended)
+    {
         return Err(NotFound(to_json_msg("Draft is no longer accepting players.")))
     }
 
@@ -424,6 +449,7 @@ pub struct UpdateDraftSessionResponse {
     banned_pokemon: Vec<u32>,
     current_player: Option<String>,
     players: Vec<PlayerData>,
+    state: DraftState,
 }
 
 impl UpdateDraftSessionResponse {
@@ -452,6 +478,7 @@ impl UpdateDraftSessionResponse {
             current_phase: current_phase,
             current_player: current_player_name,
             players: player_data,
+            state: session.draft_state,
         }
     }
 }

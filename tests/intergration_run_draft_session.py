@@ -190,7 +190,7 @@ def test_create_session_4_player_join_select_snake():
 
     res_data, status = check_draft_update(session)
     assert status == 200, f"{res_data}"
-    assert res_data == {'current_phase': 'Pick', 'banned_pokemon': [1, 2, 3, 4, 5], 'current_player': 'Player 3', 'players': [{'name': 'Player 1', 'pokemon': [], "ready": True}, {'name': 'Player 2', 'pokemon': [], "ready": True}, {'name': 'Player 3', 'pokemon': [], "ready": True}, {'name': 'Player 4', 'pokemon': [5], "ready": True}]}, f"{res_data}"
+    assert res_data == {'current_phase': 'Pick', 'banned_pokemon': [1, 2, 3, 4, 5], 'current_player': 'Player 3', 'state': 'InProgress','players': [{'name': 'Player 1', 'pokemon': [], "ready": True}, {'name': 'Player 2', 'pokemon': [], "ready": True}, {'name': 'Player 3', 'pokemon': [], "ready": True}, {'name': 'Player 4', 'pokemon': [5], "ready": True}]}, f"{res_data}"
 
 @test
 def test_toggle_ready_on_pokemon():
@@ -216,42 +216,42 @@ def test_toggle_ready_on_pokemon():
             return False
     
     res_data, status = check_draft_update(session)
-    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': False},{'name': 'Player 2', 'pokemon': [], 'ready': False}, {'name': 'Player 3', 'pokemon': [], 'ready': False}]}, f"{res_data}"
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'state': 'Open', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': False},{'name': 'Player 2', 'pokemon': [], 'ready': False}, {'name': 'Player 3', 'pokemon': [], 'ready': False}]}, f"{res_data}"
     print("Passed: All players ready status is set to false.")
 
     res_data, status = toggle_user(session, players[0])
     assert status == 200, f"{res_data}"
     res_data, status = check_draft_update(session)
     assert status == 200, f"{res_data}"
-    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': False}, {'name': 'Player 3', 'pokemon': [], 'ready': False}]}, f"{res_data}"
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'state': 'Open', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': False}, {'name': 'Player 3', 'pokemon': [], 'ready': False}]}, f"{res_data}"
     print("Passed: Setting Player 1 Ready Status")
 
     res_data, status = toggle_user(session, players[1])
     assert status == 200, f"{res_data}"
     res_data, status = check_draft_update(session)
     assert status == 200, f"{res_data}"
-    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': True}, {'name': 'Player 3', 'pokemon': [], 'ready': False}]}, f"{res_data}"
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1','state':'Open', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': True}, {'name': 'Player 3', 'pokemon': [], 'ready': False}]}, f"{res_data}"
     print("Passed: Setting Player 2 Ready Status")
 
     res_data, status = toggle_user(session, players[2])
     assert status == 200, f"{res_data}"
     res_data, status = check_draft_update(session)
     assert status == 200, f"{res_data}"
-    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': True}, {'name': 'Player 3', 'pokemon': [], 'ready': True}]}, f"{res_data}"
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1','state':'Ready', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': True}, {'name': 'Player 3', 'pokemon': [], 'ready': True}]}, f"{res_data}"
     print("Passed: Setting Player 3 Ready Status")
 
     res_data, status = toggle_user(session, players[1])
     assert status == 200, f"{res_data}"
     res_data, status = check_draft_update(session)
     assert status == 200, f"{res_data}"
-    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': False}, {'name': 'Player 3', 'pokemon': [], 'ready': True}]}, f"{res_data}"
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1','state':'Open', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': False}, {'name': 'Player 3', 'pokemon': [], 'ready': True}]}, f"{res_data}"
     print("Passed: Setting Player 1 Ready Status")
 
     res_data, status = toggle_user(session, players[1])
     assert status == 200, f"{res_data}"
     res_data, status = check_draft_update(session)
     assert status == 200, f"{res_data}"
-    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': True}, {'name': 'Player 3', 'pokemon': [], 'ready': True}]}, f"{res_data}"
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [], 'current_player': 'Player 1','state':'Ready', 'players': [{'name': 'Player 1', 'pokemon': [], 'ready': True},{'name': 'Player 2', 'pokemon': [], 'ready': True}, {'name': 'Player 3', 'pokemon': [], 'ready': True}]}, f"{res_data}"
     print("Passed: Setting Player 1 Ready Status")
 
 
@@ -266,9 +266,15 @@ def run_all():
     test_create_session_4_player_join_select_snake()
     test_toggle_ready_on_pokemon()
 
+def print_usage():
+    print("intergration_run_draft_session.py [all|list<int>]")
+
 if __name__ == "__main__":
     args = sys.argv[1:]
     tests_to_run = set(args[0].split(','))
+
+    if len(tests_to_run) == 0:
+        print_usage()
 
     if 'all' in tests_to_run:
         run_all()
