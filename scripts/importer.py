@@ -174,6 +174,15 @@ async def create_draft_rules(db):
     })
 
     await db.create("draft_rules", {
+        "name": "Intergration Test Snake Pick First",
+        "picks_per_round": 1,
+        "bans_per_round": 1,
+        "max_pokemon": 1,
+        "starting_phase": "Pick",
+        "turn_type": "Snake"
+    })
+
+    await db.create("draft_rules", {
         "name": "Intergration Test Round Robin",
         "picks_per_round": 1,
         "bans_per_round": 1,
