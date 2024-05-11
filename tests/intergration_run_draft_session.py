@@ -39,6 +39,7 @@ DRAFT_DEBUG_SET_ID = get_draft_obj_id("Debug Set", "set")
 assert DRAFT_DEBUG_SET_ID != ""
 RULE_NUZLOCKE_SNAKE_ID = get_draft_obj_id("Intergration Test Snake", "rules")
 assert RULE_NUZLOCKE_SNAKE_ID != ""
+RULE_NUZLOCKE_SNAKE_PICK_ID = get_draft_obj_id("Intergration Test Snake Pick First", "rules")
 
 DEBUG_POKEMON_SET = get_draft_set_pokemon(DRAFT_DEBUG_SET_ID)
 
@@ -274,8 +275,120 @@ def test_toggle_ready_on_pokemon():
 
 
 @test
-def test_create_session_1_player_join_select():
-    pass
+def test_full_game():
+    session = create_draft_session(DRAFT_DEBUG_SET_ID, RULE_NUZLOCKE_SNAKE_ID, "TEST 1")
+
+    if session == "":
+        return
+    else:
+        session = session['id']
+
+    players = []
+
+    print("Creating Players")
+    for i in range(3):
+        name = f"Player {i + 1}"
+        player = create_player(session, name)
+
+        if player != "":
+            players.append(player)
+            print(f"Created User: {name} {player['user_id']} in Session: {session}")
+        else:
+            print(f"Unable to  create User: {name} in Session: {session}")
+            return False
+        res_data, status = toggle_user(session, player)
+        assert status == 200, f"{res_data}"
+
+    print("Passed: Created all users and toggled them.")
+
+    res_data, status = start_session(session, players[0])
+    assert status == 200, f"{res_data}"
+    print("Passed: Started draft session.")
+
+    res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[0])
+    assert status == 200, f"{res_data}"
+    print(f"Passed: {players[0]['name']} banned {DEBUG_POKEMON_SET[0]}")
+
+    res_data, status = player_ban_pokemon(session, players[1], DEBUG_POKEMON_SET[1])
+    assert status == 200, f"{res_data}"
+    print(f"Passed: {players[1]['name']} banned {DEBUG_POKEMON_SET[1]}")
+
+    res_data, status = player_ban_pokemon(session, players[2], DEBUG_POKEMON_SET[2])
+    assert status == 200, f"{res_data}"
+    print(f"Passed: {players[2]['name']} banned {DEBUG_POKEMON_SET[2]}")
+
+    res_data, status = player_pick_pokemon(session, players[2], DEBUG_POKEMON_SET[3])
+    assert status == 200, f"{res_data}"
+    print(f"Passed: {players[2]['name']} picked {DEBUG_POKEMON_SET[3]}")
+
+    res_data, status = player_pick_pokemon(session, players[1], DEBUG_POKEMON_SET[4])
+    assert status == 200, f"{res_data}"
+    print(f"Passed: {players[1]['name']} picked {DEBUG_POKEMON_SET[4]}")
+
+    res_data, status = player_pick_pokemon(session, players[0], DEBUG_POKEMON_SET[5])
+    assert status == 200, f"{res_data}"
+    print(f"Passed: {players[0]['name']} picked {DEBUG_POKEMON_SET[5]}")
+
+    res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[6])
+    assert status == 404, f"{res_data}"
+    print(f"Passed: {players[0]['name']} failed in banning {DEBUG_POKEMON_SET[6]}")
+
+    res_data, status = check_draft_update(session)
+    assert status == 200, f"{res_data}"
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [1,2,3,4,5,6], 'current_player': 'Player 1','state':'Ended', 'players': [{'name': 'Player 1', 'pokemon': [6], 'ready': True},{'name': 'Player 2', 'pokemon': [5], 'ready': True}, {'name': 'Player 3', 'pokemon': [4], 'ready': True}]}, f"{res_data}"
+    print("Passed: Checking state update")
+
+@test
+def test_full_game_pick_first():
+    session = create_draft_session(DRAFT_DEBUG_SET_ID, RULE_NUZLOCKE_SNAKE_PICK_ID, "TEST 1")
+
+    if session == "":
+        return
+    else:
+        session = session['id']
+
+    players = []
+
+    print("Creating Players")
+    for i in range(3):
+        name = f"Player {i + 1}"
+        player = create_player(session, name)
+
+        if player != "":
+            players.append(player)
+            print(f"Created User: {name} {player['user_id']} in Session: {session}")
+        else:
+            print(f"Unable to  create User: {name} in Session: {session}")
+            return False
+        res_data, status = toggle_user(session, player)
+        assert status == 200, f"{res_data}"
+
+    print("Passed: Created all users and toggled them.")
+
+    res_data, status = start_session(session, players[0])
+    assert status == 200, f"{res_data}"
+    print("Passed: Started draft session.")
+
+    res_data, status = player_pick_pokemon(session, players[0], DEBUG_POKEMON_SET[0])
+    assert status == 200, f"{res_data}"
+    print(f"Passed: {players[0]['name']} banned {DEBUG_POKEMON_SET[0]}")
+
+    res_data, status = player_pick_pokemon(session, players[1], DEBUG_POKEMON_SET[1])
+    assert status == 200, f"{res_data}"
+    print(f"Passed: {players[1]['name']} banned {DEBUG_POKEMON_SET[1]}")
+
+    res_data, status = player_pick_pokemon(session, players[2], DEBUG_POKEMON_SET[2])
+    assert status == 200, f"{res_data}"
+    print(f"Passed: {players[2]['name']} banned {DEBUG_POKEMON_SET[2]}")
+
+    res_data, status = player_ban_pokemon(session, players[2], DEBUG_POKEMON_SET[3])
+    assert status == 404, f"{res_data}"
+    print(f"Passed: {players[2]['name']} picked {DEBUG_POKEMON_SET[3]}")
+
+    res_data, status = check_draft_update(session)
+    assert status == 200, f"{res_data}"
+    assert res_data == {'current_phase': 'Ban', 'banned_pokemon': [1,2,3], 'current_player': 'Player 3','state':'Ended', 'players': [{'name': 'Player 1', 'pokemon': [1], 'ready': True},{'name': 'Player 2', 'pokemon': [2], 'ready': True}, {'name': 'Player 3', 'pokemon': [3], 'ready': True}]}, f"{res_data}"
+    print("Passed: Setting Player 1 Ready Status")
 
 def extra():
     pass
@@ -283,6 +396,8 @@ def extra():
 def run_all():
     test_create_session_4_player_join_select_snake()
     test_toggle_ready_on_pokemon()
+    test_full_game()
+    test_full_game_pick_first()
 
 def print_usage():
     print("intergration_run_draft_session.py [all|list<int>]")
@@ -301,4 +416,8 @@ if __name__ == "__main__":
             test_create_session_4_player_join_select_snake()
         if '2' in tests_to_run:
             test_toggle_ready_on_pokemon()
+        if '3' in tests_to_run:
+            test_full_game()
+        if '4' in tests_to_run:
+            test_full_game_pick_first()
 
