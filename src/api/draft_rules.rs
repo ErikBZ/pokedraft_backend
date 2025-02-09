@@ -46,7 +46,10 @@ pub async fn create_draft_rules(
     let draft_rules: DraftRules = dr_form.0;
 
     let result: Vec<Record> = match db.create("draft_rules").content(draft_rules).await {
-        Ok(r) => r,
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return None;
+        }
         Err(e) => {
             println!("{}", e);
             return None;
@@ -54,7 +57,7 @@ pub async fn create_draft_rules(
     };
 
     let record = if result.len() > 0 {
-        format!("{{\"id\": \"{}\"}}", result[0].id.id)
+        format!("{{\"id\": \"{}\"}}", result[0].id)
     } else {
         "{\"message\": \"Could not create Draft Rule\"}".into()
     };

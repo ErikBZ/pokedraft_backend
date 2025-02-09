@@ -7,7 +7,8 @@ use surrealdb::Surreal;
 use surrealdb::engine::remote::ws::Client;
 
 #[get("/pokemon/get/<id>")]
-pub async fn get(id: u64, db: &State<Surreal<Client>>) -> Option<Json<Pokemon>> {
+// Why couldn't this be a u64?
+pub async fn get(id: &str, db: &State<Surreal<Client>>) -> Option<Json<Pokemon>> {
     let pokemon: Option<Pokemon> = match db.select(("pokemon", id)).await {
         Ok(p) => p,
         Err(e) => {
