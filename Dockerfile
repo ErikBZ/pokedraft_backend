@@ -1,4 +1,4 @@
-FROM rust:1.77.1 as builder
+FROM rust:1.81.0 as builder
 WORKDIR /app
 COPY src src
 COPY Cargo.toml Cargo.toml
