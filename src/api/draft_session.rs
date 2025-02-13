@@ -1,14 +1,14 @@
+use crate::api::utils::{relate_objects, run_query};
 use crate::models::draft::{
-    DraftPhase, DraftRules, DraftSession, DraftSessionCreateForm, DraftUser, DraftUserForm,
-    DraftUserReturnData,
+    DraftPhase, DraftRules, DraftSession, DraftSessionCreateForm, DraftState, DraftUser,
+    DraftUserForm, DraftUserReturnData,
 };
-use crate::models::{hash_uuid, Record};
 use crate::models::pokemon::PokemonType;
-use crate::api::utils::{run_query, relate_objects};
+use crate::models::{hash_uuid, Record};
 
-use rocket::State;
-use rocket::serde::json::Json;
 use rocket::response::status::NotFound;
+use rocket::serde::json::Json;
+use rocket::State;
 
 use serde::{Deserialize, Serialize};
 
@@ -21,8 +21,8 @@ const DRAFT_USER_RELATION: &str = "players";
 const DRAFT_SESSION: &str = "draft_session";
 const DRAFT_USER_TB: &str = "draft_user";
 
-fn to_json_err(str: &str) -> String {
-    return format!("{{\"message\": \"{}\"}}", str)
+fn to_json_msg(str: &str) -> String {
+    format!("{{\"message\": \"{}\"}}", str)
 }
 
 #[get("/draft_session/<id>")]
@@ -86,6 +86,123 @@ pub async fn create_draft_session(
     Some(Json(result))
 }
 
+#[post(
+    "/draft_session/<id>/ready",
+    format = "application/json",
+    data = "<user_form>"
+)]
+pub async fn toggle_ready(
+    id: &str,
+    user_form: Json<ReadyDraftUserForm>,
+    db: &State<Surreal<Client>>,
+) -> Result<String, NotFound<String>> {
+    let new_username = user_form.0.user_id;
+    let query =
+        format!("SELECT *,(SELECT * from ->{DRAFT_USER_RELATION}.out ORDER BY order_in_session ASC) as players FROM draft_session:{id};");
+
+    let session: DraftSession = match run_query(query, db).await {
+        Some(s) => s,
+        None => return Err(NotFound("Session not found".into())),
+    };
+
+    if session.draft_state == DraftState::InProgress || session.draft_state == DraftState::Ended {
+        // TODO: Set error message
+        return Err(NotFound(to_json_msg(
+            "Can't ready when the draft is in progress.",
+        )));
+    }
+
+    // Get the user
+    let user_id = RecordId::from_table_key("draft_user", new_username);
+    let players = match session.players {
+        Some(p) => p,
+        None => {
+            return Err(NotFound(to_json_msg(
+                "Can't ready when the draft is in progress.",
+            )))
+        }
+    };
+
+    let mut all_players_ready = true;
+    for player in players.iter() {
+        if let Some(p_id) = &player.id {
+            if p_id != &user_id {
+                all_players_ready = player.ready & all_players_ready
+            }
+        }
+    }
+
+    let user = match get_current_player(players, &user_id) {
+        Some(u) => u,
+        None => {
+            return Err(NotFound(to_json_msg(
+                "Can't ready when the draft is in progress.",
+            )))
+        }
+    };
+
+    let ready = !user.ready;
+    all_players_ready = all_players_ready && ready;
+    let new_draft_state = if all_players_ready {
+        DraftState::Ready
+    } else {
+        DraftState::Open
+    };
+
+    #[derive(Serialize)]
+    struct UpdateData {
+        ready: bool,
+    }
+    let update = UpdateData { ready };
+    let _updated: Option<Record> = db
+        .update(user_id)
+        .merge(update)
+        .await
+        .map_err(|e| NotFound(e.to_string()))?;
+
+    #[derive(Serialize)]
+    struct SessionUpdateData {
+        draft_state: DraftState,
+    }
+    let update = SessionUpdateData {
+        draft_state: new_draft_state,
+    };
+    // Maybe use set to session_id so that it's easier to tell what the id is for
+    let _updated: Option<Record> = db
+        .update((DRAFT_SESSION, id))
+        .merge(update)
+        .await
+        .map_err(|e| NotFound(e.to_string()))?;
+
+    Ok(to_json_msg("All good"))
+}
+
+#[post(
+    "/draft_session/<id>/start",
+    format = "application/json",
+    data = "<user_form>"
+)]
+pub async fn start(
+    id: &str,
+    user_form: Json<ReadyDraftUserForm>,
+    db: &State<Surreal<Client>>,
+) -> Result<String, NotFound<String>> {
+    #[derive(Serialize)]
+    struct SessionUpdateData {
+        draft_state: DraftState,
+    }
+    let update = SessionUpdateData {
+        draft_state: DraftState::InProgress,
+    };
+
+    let _updated: Option<Record> = db
+        .update((DRAFT_SESSION, id))
+        .merge(update)
+        .await
+        .map_err(|e| NotFound(e.to_string()))?;
+    Ok(to_json_msg("All Good"))
+}
+
 #[get("/draft_session/<id>/update")]
 pub async fn update_draft_session(
     id: &str,
@@ -103,8 +220,10 @@ pub async fn update_draft_session(
     Ok(Json(resp))
 }
 
+// TODO: Change this to `join`
 #[options("/draft_session/<id>/create-user")]
 pub fn option_create_user<'a>(id: &str) -> &'a str {
+    let _id = id;
     "Ok"
 }
 
@@ -125,15 +244,24 @@ pub async fn create_user(
     // Guarding Checks
     let session: DraftSession = match run_query(query, db).await {
         Some(s) => s,
-        None => return Err(NotFound(to_json_err("Session not found"))),
+        None => return Err(NotFound(to_json_msg("Session not found"))),
     };
 
+    if session.num_of_players() >= (session.max_num_players as u32)
+        && (session.draft_state != DraftState::InProgress
+            || session.draft_state != DraftState::Ended)
+    {
+        return Err(NotFound(to_json_msg(
+            "Draft is no longer accepting players.",
+        )));
+    }
+
     if session.is_name_taken(&new_username) {
-        return Err(NotFound(to_json_err("Username already in use")));
+        return Err(NotFound(to_json_msg("Username already in use")));
     }
 
     if !session.slots_available() {
-        return Err(NotFound(to_json_err("No slots available to join")));
+        return Err(NotFound(to_json_msg("No slots available to join")));
     }
 
     // Create User
@@ -143,10 +271,10 @@ pub async fn create_user(
     let new_user = DraftUser::new(new_username.clone(), hash, session.num_of_players());
     let new_record: DraftUser = match db.create("draft_user").content(new_user).await {
         Ok(Some(r)) => r,
-        Ok(None) => return Err(NotFound(to_json_err("Could not create record"))),
+        Ok(None) => return Err(NotFound(to_json_msg("Could not create record"))),
         Err(e) => {
             println!("{}", e);
-            return Err(NotFound(to_json_err("Could not create record")));
+            return Err(NotFound(to_json_msg("Could not create record")));
         }
     };
 
@@ -164,12 +292,13 @@ pub async fn create_user(
     #[derive(Serialize)]
     struct UpdateData {
         accepting_players: bool,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        draft_state: DraftState,
         current_player: Option<RecordId>,
     }
     let mut update_data = UpdateData {
         accepting_players: true,
         current_player: None,
+        draft_state: DraftState::Open,
     };
 
     let user_id = format!("{}", new_user_id);
@@ -181,7 +310,7 @@ pub async fn create_user(
     // TODO might need to do smarter casting of u16 to u32
     if session.num_of_players() + 1 >= (session.max_num_players as u32) {
         update_data.accepting_players = false;
-    }
+    };
 
     let _updated: Option<Record> = db
         .update((DRAFT_SESSION, id))
@@ -203,6 +332,7 @@ pub async fn create_user(
 
 #[options("/draft_session/<id>/select-pokemon")]
 pub fn option_select_pokemon<'a>(id: &str) -> &'a str {
+    let _id = id;
     "Ok"
 }
 
@@ -233,19 +363,19 @@ pub async fn select_pokemon<'a>(
         Err(_) => return Err(NotFound("Could not parse uuid".into())),
     };
 
-    if !session.draft_has_started() {
-        return Err(NotFound(to_json_err("Draft has not yet started")));
+    if session.draft_state != DraftState::InProgress {
+        return Err(NotFound(to_json_msg("Draft has not yet started")));
     }
     if session.is_pokemon_chosen(&select_pokemon.pokemon_id) {
-        return Err(NotFound(
-            to_json_err("Pokemon cannot be selected. It's either banned or has already been selected."),
-        ));
+        return Err(NotFound(to_json_msg(
+            "Pokemon cannot be selected. It's either banned or has already been selected.",
+        )));
     }
     if select_pokemon.action != session.current_phase {
-        return Err(NotFound(to_json_err("Current action not allowed")));
+        return Err(NotFound(to_json_msg("Current action not allowed")));
     }
     if !session.is_current_player(&draft_user_id) {
-        return Err(NotFound(to_json_err("It is not your turn")));
+        return Err(NotFound(to_json_msg("It is not your turn")));
     };
 
     // Get Next Player ID in session
@@ -257,23 +387,25 @@ pub async fn select_pokemon<'a>(
 
     // Get Next Phase in Session
     let next_phase = session.get_next_phase();
+    // Check if Session has ended
+    let draft_state = if session.check_if_session_is_over() {
+        DraftState::Ended
+    } else {
+        session.draft_state
+    };
 
     let (mut pokemon_chosen_in_session, players) = (session.selected_pokemon, session.players);
     let players = match players {
         Some(p) => p,
-        None => {
-            return Err(NotFound(to_json_err("Nothing")))
-        }
+        None => return Err(NotFound(to_json_msg("Nothing"))),
     };
     let mut player = match get_current_player(players, &draft_user_id) {
         Some(p) => p,
-        None => {
-            return Err(NotFound(to_json_err("User not in session.")))
-        }
+        None => return Err(NotFound(to_json_msg("User not in session."))),
     };
 
     if !player.check_key_hash(key_hash) {
-        return Err(NotFound(to_json_err("Access Denied")));
+        return Err(NotFound(to_json_msg("Access Denied")));
     };
 
     if let DraftPhase::Pick = select_pokemon.action {
@@ -289,12 +421,14 @@ pub async fn select_pokemon<'a>(
         turn_ticker: u32,
         current_player: Option<RecordId>,
         current_phase: DraftPhase,
+        draft_state: DraftState,
     }
     let update_data = SessionUpdateData {
         selected_pokemon: pokemon_chosen_in_session.clone(),
         turn_ticker: turn,
         current_player: next_player_id,
         current_phase: next_phase,
+        draft_state,
     };
     let _updated: Option<Record> = db
         .update((DRAFT_SESSION, id))
@@ -323,11 +457,12 @@ pub async fn select_pokemon<'a>(
     }))
 }
 
+
 fn get_current_player(players: Vec<DraftUser>, id: &RecordId) -> Option<DraftUser> {
     for player in players {
         if let Some(ref t) = player.id {
             if t == id {
-                return Some(player)
+                return Some(player);
             }
         }
     }
@@ -356,12 +491,17 @@ pub struct UpdateDraftSessionResponse {
     banned_pokemon: Vec<u32>,
     current_player: Option<String>,
     players: Vec<PlayerData>,
+    state: DraftState,
 }
 
 impl UpdateDraftSessionResponse {
     fn from(session: DraftSession) -> UpdateDraftSessionResponse {
         let current_player_name = session.get_current_player_name();
-        let (selected_pokemon, current_phase, players) = (session.selected_pokemon, session.current_phase, session.players);
+        let (selected_pokemon, current_phase, players) = (
+            session.selected_pokemon,
+            session.current_phase,
+            session.players,
+        );
         let players: Vec<DraftUser> = match players {
             Some(p) => p,
             None => Vec::new(),
@@ -375,6 +515,7 @@ impl UpdateDraftSessionResponse {
             .map(|element| PlayerData {
                 name: element.name.clone(),
                 pokemon: element.selected_pokemon.clone(),
+                ready: element.ready,
             })
             .collect();
 
@@ -383,6 +524,7 @@ impl UpdateDraftSessionResponse {
             current_phase: current_phase,
             current_player: current_player_name,
             players: player_data,
+            state: session.draft_state,
         }
     }
 }
@@ -391,6 +533,7 @@ impl UpdateDraftSessionResponse {
 pub struct PlayerData {
     name: String,
     pokemon: Vec<u32>,
+    ready: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -400,3 +543,9 @@ pub struct PokemonSubData<'a> {
     type2: PokemonType,
     id: u32,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReadyDraftUserForm {
+    user_id: String,
+}
+

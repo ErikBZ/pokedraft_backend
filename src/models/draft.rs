@@ -2,6 +2,14 @@ use serde::{Deserialize, Serialize};
 use surrealdb::RecordId;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+pub enum DraftState {
+    Open,               // Starting value. Allows players to join
+    Ready,              // All players have listed themselves as ready
+    InProgress,         // No more players may join, Pick/Bans in progress
+    Ended               // Pick/Bans are done. All pokemon have been chosen
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 #[warn(dead_code)]
 pub enum DraftPhase {
     Pick,
@@ -26,6 +34,20 @@ pub struct DraftRules {
     turn_type: TurnType,
 }
 
+impl Default for DraftRules {
+    fn default() -> DraftRules {
+        DraftRules{
+            id: None,
+            name: "".to_string(),
+            picks_per_round: 1,
+            bans_per_round: 1,
+            max_pokemon: 1,
+            starting_phase: DraftPhase::Ban,
+            turn_type: TurnType::Snake,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DraftSession {
     pub id: Option<RecordId>,
@@ -41,7 +63,30 @@ pub struct DraftSession {
     turn_ticker: u32,
     // TODO: Use enum here DraftState::{ACCEPTING_PLAYER, MIN_JOINED, MAX_JOINED, ONGOING, DONE}
     accepting_players: bool,
+    pub draft_state: DraftState,
     pub current_phase: DraftPhase,
+}
+
+impl Default for DraftSession {
+    fn default() -> DraftSession {
+        DraftSession {
+            id: None,
+            name: "".to_string(),
+            min_num_players: 4,
+            max_num_players: 4,
+            selected_pokemon: vec![],
+            players: None,
+            draft_rules: DraftRules {
+                ..Default::default()
+            },
+            draft_set: None,
+            current_player: None,
+            turn_ticker: 0,
+            accepting_players: false,
+            draft_state: DraftState::Open,
+            current_phase: DraftPhase::Ban,
+        }
+    }
 }
 
 impl DraftSession {
@@ -58,6 +103,7 @@ impl DraftSession {
             draft_set: Some(form.draft_set),
             current_player: None,
             turn_ticker: 0,
+            draft_state: DraftState::Open,
             accepting_players: true,
         }
     }
@@ -121,6 +167,37 @@ impl DraftSession {
         }
     }
 
+    pub fn check_if_session_is_over(&self) -> bool {
+        self.calculate_pk_num_floor() >= (self.draft_rules.max_pokemon as u32)
+    }
+
+    fn calculate_pk_num_floor(&self) -> u32 {
+        let picks_per_round = self.draft_rules.picks_per_round as u32;
+        let bans_per_round = self.draft_rules.bans_per_round as u32;
+        let num_of_players = self.num_of_players();
+        let turns_per_round = num_of_players * (picks_per_round + bans_per_round);
+        let num_of_rounds = (self.turn_ticker + 1) / turns_per_round;
+        let remaining_turns = (self.turn_ticker + 1) % turns_per_round;
+
+        // Getting the minimum number of pokemon that all players have
+        // once ALL players have at least draft_rules.max_pokemon then the sesion has ended
+        let pokemon_selected = if self.draft_rules.starting_phase == DraftPhase::Pick {
+            if remaining_turns > (picks_per_round * num_of_players) {
+                picks_per_round
+            } else {
+                remaining_turns / (picks_per_round * num_of_players)
+            }
+        } else {
+            if remaining_turns > (bans_per_round * num_of_players) {
+                (remaining_turns - (bans_per_round * num_of_players)) / (picks_per_round * num_of_players)
+            } else {
+                0
+            }
+        };
+
+        pokemon_selected + (num_of_rounds * picks_per_round)
+    }
+
     pub fn is_current_player(&self, id: &RecordId) -> bool {
         if let Some(ref t) = self.current_player {
             return t == id
@@ -140,7 +217,7 @@ impl DraftSession {
     }
 
     pub fn draft_has_started(&self) -> bool {
-        !self.accepting_players
+        self.draft_state == DraftState::InProgress
     }
 
     pub fn slots_available(&self) -> bool {
@@ -182,6 +259,21 @@ pub struct DraftUser {
     // find some crypto hash
     key_hash: i64,
     pub order_in_session: u32,
+    pub ready: bool,
+}
+
+impl Default for DraftUser {
+    fn default() -> DraftUser {
+        DraftUser {
+            id: None,
+            name: "".to_string(),
+            session: None,
+            selected_pokemon: vec![],
+            key_hash: 0,
+            order_in_session: 0,
+            ready: false
+        }
+    }
 }
 
 impl DraftUser {
@@ -193,6 +285,7 @@ impl DraftUser {
             selected_pokemon: Vec::new(),
             key_hash: key,
             order_in_session: order,
+            ready: false
         }
     }
 
@@ -233,3 +326,77 @@ impl DraftUserReturnData {
 pub struct DraftUserForm {
     pub name: String,
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn generate_players(size: u32) -> Vec<DraftUser>{
+        let mut players: Vec<DraftUser> = vec![];
+        for _i in 0..size {
+            players.push(DraftUser {
+                ..Default::default()
+            })
+        }
+        players
+    }
+
+    #[test]
+    fn test_pk_floor_base_rules_four() {
+        let session = DraftSession {
+            turn_ticker: 8,
+            players: Some(generate_players(4)),
+            draft_rules: DraftRules {
+                picks_per_round: 1,
+                bans_per_round: 1,
+                max_pokemon: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_eq!(session.calculate_pk_num_floor(), 1)
+    }
+
+    #[test]
+    fn test_pk_floor_base_rules_three() {
+        let mut session = DraftSession {
+            turn_ticker: 7,
+            players: Some(generate_players(3)),
+            draft_rules: DraftRules {
+                picks_per_round: 2,
+                bans_per_round: 2,
+                max_pokemon: 5,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(session.calculate_pk_num_floor(), 0);
+        session.turn_ticker = 25;
+        assert_eq!(session.calculate_pk_num_floor(), 4)
+    }
+
+    #[test]
+    fn test_pk_floor_base_rules_two() {
+        let mut session = DraftSession {
+            turn_ticker: 0,
+            players: Some(generate_players(2)),
+            draft_rules: DraftRules {
+                picks_per_round: 1,
+                bans_per_round: 1,
+                max_pokemon: 3,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_eq!(session.calculate_pk_num_floor(), 0);
+        session.turn_ticker = 9;
+        assert_eq!(session.calculate_pk_num_floor(), 2);
+        session.draft_rules.starting_phase = DraftPhase::Pick;
+        assert_eq!(session.calculate_pk_num_floor(), 3);
+        session.turn_ticker = 10;
+        assert_eq!(session.calculate_pk_num_floor(), 3);
+    }
+}
+
