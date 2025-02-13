@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use surrealdb::sql::Thing;
+use surrealdb::{sql::Thing, RecordId};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[warn(dead_code)]
@@ -29,7 +29,7 @@ pub enum PokemonType {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Pokemon {
-    pub dex_id: u16,
+    pub dex_id: RecordId,
     pub name: String,
     pub type1: PokemonType,
     pub type2: Option<PokemonType>,

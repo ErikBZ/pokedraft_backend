@@ -12,8 +12,7 @@ use rocket::response::status::NotFound;
 
 use serde::{Deserialize, Serialize};
 
-use surrealdb::Surreal;
-use surrealdb::sql::{Id, Thing};
+use surrealdb::{RecordId, Surreal};
 use surrealdb::engine::remote::ws::Client;
 
 use uuid::Uuid;
@@ -75,7 +74,8 @@ pub async fn create_draft_session(
 
     let draft_session = DraftSession::from(session_form, rules);
     let result: Vec<Record> = match db.create("draft_session").content(draft_session).await {
-        Ok(r) => r,
+        Ok(Some(r)) => r,
+        Ok(None) => return None,
         Err(e) => {
             println!("{}", e);
             return None;
@@ -83,7 +83,7 @@ pub async fn create_draft_session(
     };
 
     let record = if result.len() > 0 {
-        format!("{{\"id\": \"{}\"}}", result[0].id.id)
+        format!("{{\"id\": \"{}\"}}", result[0].id)
     } else {
         "{\"message\": \"Could not create Draft Rule\"}".into()
     };
@@ -147,19 +147,19 @@ pub async fn create_user(
 
     let new_user = DraftUser::new(new_username.clone(), hash, session.num_of_players());
     let new_records: Vec<Record> = match db.create("draft_user").content(new_user).await {
-        Ok(r) => r,
+        Ok(Some(r)) => r,
+        Ok(None) => return Err(NotFound(to_json_err("Could not create record"))),
         Err(e) => {
             println!("{}", e);
             return Err(NotFound(to_json_err("Could not create record")));
         }
     };
 
+    let record_id = RecordId::from_table_key("draft_session", id);
+
     relate_objects(
         db,
-        &Thing {
-            tb: "draft_session".into(),
-            id: Id::String(id.into()),
-        },
+        &record_id,
         &new_records[0].id,
         DRAFT_USER_RELATION,
     )
@@ -169,17 +169,17 @@ pub async fn create_user(
     struct UpdateData {
         accepting_players: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
-        current_player: Option<Thing>,
+        current_player: Option<RecordId>,
     }
     let mut update_data = UpdateData {
         accepting_players: true,
         current_player: None,
     };
 
-    let user_id = format!("{}", &new_records[0].id.id);
+    let user_id = format!("{}", &new_records[0].id);
     if session.num_of_players() == 0 {
         // TODO Ugh this looks awful
-        update_data.current_player = Some(Thing::from((DRAFT_USER_TB.to_owned(), user_id.clone())));
+        update_data.current_player = Some(RecordId::from_table_key(DRAFT_USER_TB.to_owned(), user_id.clone()));
     };
 
     // TODO might need to do smarter casting of u16 to u32
@@ -230,7 +230,7 @@ pub async fn select_pokemon<'a>(
         None => return Err(NotFound("Session not found".into())),
     };
 
-    let draft_user_id = Thing::from((DRAFT_USER_TB.to_owned(), select_pokemon.user_id.clone()));
+    let draft_user_id = RecordId::from_table_key(DRAFT_USER_TB.to_owned(), select_pokemon.user_id.clone());
 
     let key_hash = match Uuid::parse_str(&select_pokemon.secret) {
         Ok(k) => hash_uuid(&k),
@@ -255,7 +255,7 @@ pub async fn select_pokemon<'a>(
     // Get Next Player Thing in session
     let (turn, next_player_id) = session.get_next_player_id();
     let next_player_id = match next_player_id {
-        Some(s) => Some(Thing::from((DRAFT_USER_TB.to_owned(), s))),
+        Some(s) => Some(RecordId::from_table_key(DRAFT_USER_TB.to_owned(), s)),
         None => None
     };
 
@@ -288,14 +288,14 @@ pub async fn select_pokemon<'a>(
 
     // update Session
     #[derive(Serialize)]
-    struct SessionUpdateData<'a> {
-        selected_pokemon: &'a [u32],
+    struct SessionUpdateData {
+        selected_pokemon: Vec<u32>,
         turn_ticker: u32,
-        current_player: Option<Thing>,
+        current_player: Option<RecordId>,
         current_phase: DraftPhase,
     }
     let update_data = SessionUpdateData {
-        selected_pokemon: &pokemon_chosen_in_session[..],
+        selected_pokemon: pokemon_chosen_in_session.clone(),
         turn_ticker: turn,
         current_player: next_player_id,
         current_phase: next_phase,
@@ -307,11 +307,11 @@ pub async fn select_pokemon<'a>(
         .map_err(|e| NotFound(e.to_string()))?;
 
     #[derive(Serialize)]
-    struct PlayerUpdateData<'a> {
-        selected_pokemon: &'a [u32],
+    struct PlayerUpdateData {
+        selected_pokemon: Vec<u32>,
     }
     let update_data = PlayerUpdateData {
-        selected_pokemon: &player.selected_pokemon[..]
+        selected_pokemon: player.selected_pokemon.clone(),
     };
     let _updated: Option<Record> = db
         .update(draft_user_id)
@@ -327,7 +327,7 @@ pub async fn select_pokemon<'a>(
     }))
 }
 
-fn get_current_player(players: Vec<DraftUser>, id: &Thing) -> Option<DraftUser> {
+fn get_current_player(players: Vec<DraftUser>, id: &RecordId) -> Option<DraftUser> {
     for player in players {
         if let Some(ref t) = player.id {
             if t == id {
