@@ -1,5 +1,5 @@
 [default]
-port = 8081
+port = 8080
 surreal_username = "pokedraft_api"
 surreal_db_name = "pokedraft"
 surreal_db_user_type="Database"
