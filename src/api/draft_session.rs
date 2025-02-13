@@ -57,7 +57,7 @@ pub fn option_draft_session<'a>() -> &'a str {
 pub async fn create_draft_session(
     session_form: Json<DraftSessionCreateForm>,
     db: &State<Surreal<Client>>,
-) -> Option<String> {
+) -> Option<Json<DraftSession>> {
     // should you even do this?
     let session_form: DraftSessionCreateForm = session_form.0;
 
@@ -73,7 +73,7 @@ pub async fn create_draft_session(
     };
 
     let draft_session = DraftSession::from(session_form, rules);
-    let result: Vec<Record> = match db.create("draft_session").content(draft_session).await {
+    let result: DraftSession = match db.create("draft_session").content(draft_session).await {
         Ok(Some(r)) => r,
         Ok(None) => return None,
         Err(e) => {
@@ -82,13 +82,8 @@ pub async fn create_draft_session(
         }
     };
 
-    let record = if result.len() > 0 {
-        format!("{{\"id\": \"{}\"}}", result[0].id)
-    } else {
-        "{\"message\": \"Could not create Draft Rule\"}".into()
-    };
 
-    Some(record)
+    Some(Json(result))
 }
 
 #[get("/draft_session/<id>/update")]
@@ -146,7 +141,7 @@ pub async fn create_user(
     let hash = hash_uuid(&key);
 
     let new_user = DraftUser::new(new_username.clone(), hash, session.num_of_players());
-    let new_records: Vec<Record> = match db.create("draft_user").content(new_user).await {
+    let new_record: DraftUser = match db.create("draft_user").content(new_user).await {
         Ok(Some(r)) => r,
         Ok(None) => return Err(NotFound(to_json_err("Could not create record"))),
         Err(e) => {
@@ -156,11 +151,12 @@ pub async fn create_user(
     };
 
     let record_id = RecordId::from_table_key("draft_session", id);
+    let new_user_id = new_record.id.unwrap();
 
     relate_objects(
         db,
         &record_id,
-        &new_records[0].id,
+        &new_user_id,
         DRAFT_USER_RELATION,
     )
     .await?;
@@ -176,7 +172,7 @@ pub async fn create_user(
         current_player: None,
     };
 
-    let user_id = format!("{}", &new_records[0].id);
+    let user_id = format!("{}", new_user_id);
     if session.num_of_players() == 0 {
         // TODO Ugh this looks awful
         update_data.current_player = Some(RecordId::from_table_key(DRAFT_USER_TB.to_owned(), user_id.clone()));
@@ -252,7 +248,7 @@ pub async fn select_pokemon<'a>(
         return Err(NotFound(to_json_err("It is not your turn")));
     };
 
-    // Get Next Player Thing in session
+    // Get Next Player ID in session
     let (turn, next_player_id) = session.get_next_player_id();
     let next_player_id = match next_player_id {
         Some(s) => Some(RecordId::from_table_key(DRAFT_USER_TB.to_owned(), s)),
