@@ -65,7 +65,7 @@ def save_pokemon_to_db(db, pokemon):
         pk['type2'] = "NONE" if pk['type2'] == "" else pk['type2'].upper()
         db.create("pokemon",
             {
-                "id": f"pokemon:{pk['id']}",
+                "id": f"{pk['id']}",
                 "dex_id": int(pk['id']),
                 "name": pk["name"],
                 "is_mythic": bool(pk['is_mythical']),
