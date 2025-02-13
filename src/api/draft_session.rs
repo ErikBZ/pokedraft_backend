@@ -14,8 +14,6 @@ use serde::{Deserialize, Serialize};
 
 use surrealdb::{RecordId, Surreal};
 use surrealdb::engine::remote::ws::Client;
-use surrealdb::sql::{Id, Thing};
-use surrealdb::Surreal;
 
 use uuid::Uuid;
 
@@ -115,10 +113,7 @@ pub async fn toggle_ready(
     }
 
     // Get the user
-    let user_id = Thing {
-        tb: "draft_user".into(),
-        id: Id::String(new_username),
-    };
+    let user_id = RecordId::from_table_key("draft_user", new_username);
     let players = match session.players {
         Some(p) => p,
         None => {
@@ -160,7 +155,7 @@ pub async fn toggle_ready(
     }
     let update = UpdateData { ready };
     let _updated: Option<Record> = db
-        .update((DRAFT_USER_TB, user_id))
+        .update(user_id)
         .merge(update)
         .await
         .map_err(|e| NotFound(e.to_string()))?;
@@ -276,7 +271,7 @@ pub async fn create_user(
     let new_user = DraftUser::new(new_username.clone(), hash, session.num_of_players());
     let new_record: DraftUser = match db.create("draft_user").content(new_user).await {
         Ok(Some(r)) => r,
-        Ok(None) => return Err(NotFound(to_json_err("Could not create record"))),
+        Ok(None) => return Err(NotFound(to_json_msg("Could not create record"))),
         Err(e) => {
             println!("{}", e);
             return Err(NotFound(to_json_msg("Could not create record")));
@@ -297,7 +292,6 @@ pub async fn create_user(
     #[derive(Serialize)]
     struct UpdateData {
         accepting_players: bool,
-        #[serde(skip_serializing_if = "Option::is_none")]
         draft_state: DraftState,
         current_player: Option<RecordId>,
     }
