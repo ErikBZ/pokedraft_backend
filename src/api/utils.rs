@@ -3,8 +3,7 @@ use rocket::response::status::NotFound;
 
 use serde::Deserialize;
 
-use surrealdb::Surreal;
-use surrealdb::sql::Thing;
+use surrealdb::{Surreal, RecordId};
 use surrealdb::engine::remote::ws::Client;
 
 // TODO: Do someting useful with these errors
@@ -31,8 +30,8 @@ where
 
 pub async fn relate_objects(
     db: &State<Surreal<Client>>,
-    obj_in: &Thing,
-    obj_out: &Thing,
+    obj_in: &RecordId,
+    obj_out: &RecordId,
     relation: &str,
 ) -> Result<(), NotFound<String>> {
     let query = format!("RELATE {}->{}->{};", obj_in, relation, obj_out);

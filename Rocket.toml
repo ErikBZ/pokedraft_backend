@@ -4,7 +4,7 @@ surreal_username = "pokedraft_api"
 surreal_db_name = "pokedraft"
 surreal_db_user_type="Database"
 
-[debug]
+[dev]
 surreal_namespace = "dev"
 surreal_addr = "localhost:8000"
 

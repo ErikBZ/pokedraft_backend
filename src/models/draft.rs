@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use surrealdb::sql::Thing;
+use surrealdb::RecordId;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 pub enum DraftState {
@@ -25,7 +25,7 @@ pub enum TurnType {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DraftRules {
-    id: Option<Thing>,
+    id: Option<RecordId>,
     name: String,
     picks_per_round: u16,
     bans_per_round: u16,
@@ -50,7 +50,7 @@ impl Default for DraftRules {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DraftSession {
-    pub id: Option<Thing>,
+    pub id: Option<RecordId>,
     name: String,
     pub min_num_players: u16,
     pub max_num_players: u16,
@@ -59,7 +59,7 @@ pub struct DraftSession {
     pub players: Option<Vec<DraftUser>>,
     draft_rules: DraftRules,
     draft_set: Option<String>,
-    pub current_player: Option<Thing>,
+    pub current_player: Option<RecordId>,
     turn_ticker: u32,
     // TODO: Use enum here DraftState::{ACCEPTING_PLAYER, MIN_JOINED, MAX_JOINED, ONGOING, DONE}
     accepting_players: bool,
@@ -132,7 +132,7 @@ impl DraftSession {
 
             if let Some(player) = players.get(next_player_i) {
                 if let Some(t) = &player.id {
-                    return (self.turn_ticker + 1, Some(format!("{}", t.id)));
+                    return (self.turn_ticker + 1, Some(format!("{}", t)));
                 }
             }
         } 
@@ -198,7 +198,7 @@ impl DraftSession {
         pokemon_selected + (num_of_rounds * picks_per_round)
     }
 
-    pub fn is_current_player(&self, id: &Thing) -> bool {
+    pub fn is_current_player(&self, id: &RecordId) -> bool {
         if let Some(ref t) = self.current_player {
             return t == id
         }
@@ -251,10 +251,10 @@ pub struct DraftSessionCreateForm {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DraftUser {
-    pub id: Option<Thing>,
+    pub id: Option<RecordId>,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    session: Option<Thing>,
+    session: Option<RecordId>,
     pub selected_pokemon: Vec<u32>,
     // find some crypto hash
     key_hash: i64,

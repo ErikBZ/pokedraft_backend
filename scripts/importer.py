@@ -3,7 +3,7 @@ from surrealdb import Surreal
 import json
 import os
 import requests
-import toml
+import toml, sys
 
 def get_json():
     with open("scripts/pokemon_models.json") as f:
@@ -11,7 +11,7 @@ def get_json():
 
 # TODO: this should be better, and shouldn't just check the http endpoint
 async def wait_for_surreal(addr):
-    for i in range(10):
+    for _ in range(10):
         try:
             resp = requests.get(f"http://{addr}", allow_redirects=False)
             if resp.status_code == 307:
@@ -38,31 +38,34 @@ async def main():
         print("SurrealDB did not start.")
         return
 
-    async with Surreal(surreal_addr) as db:
-        await db.signin({"user": "root", "pass": f"{root_pwd}"})
-        await db.use(namespace, "pokedraft")
+    with Surreal(surreal_addr) as db:
+        db.signin({"username": "root", "password": f"{root_pwd}"})
+
+        db.use(namespace, "pokedraft")
         # Check if user exists, if yes exists
-        resp = await db.query("SELECT * FROM canary:surreal")
-        if len(resp[0]['result']) >= 1:
+        resp = db.query("SELECT * FROM canary:surreal")
+        if len(resp) >= 1:
             print("Canary found. Not moving forth with import.")
             return
 
-        await save_pokemon_to_db(db, raw_pokemon)
-        await create_pokemon_lists(db)
-        await create_draft_rules(db)
+        save_pokemon_to_db(db, raw_pokemon)
+        create_pokemon_lists(db)
+        create_draft_rules(db)
 
-        result = await db.create("canary", {"id": "surreal"})
-        result = await db.query(f"DEFINE USER {username} ON DATABASE PASSWORD '{password}' ROLES OWNER;")
+        result = db.create("canary", {"id": "surreal"})
+        result = db.query(f"DEFINE USER {username} ON DATABASE PASSWORD '{password}' ROLES OWNER;")
         print(result)
 
+    db.close()
+
 # TODO maybe create a fixed ID for the initial sets?
-async def save_pokemon_to_db(db, pokemon):
+def save_pokemon_to_db(db, pokemon):
     for pk in pokemon:
         pk['evolves_from'] = 0 if pk["evolves_from"] == "" else int(pk["evolves_from"])
         pk['type2'] = "NONE" if pk['type2'] == "" else pk['type2'].upper()
-        result = await db.create("pokemon",
+        db.create("pokemon",
             {
-                "id": f"pokemon:{pk['id']}",
+                "id": f"{pk['id']}",
                 "dex_id": int(pk['id']),
                 "name": pk["name"],
                 "is_mythic": bool(pk['is_mythical']),
@@ -91,18 +94,18 @@ def pokemon_select(before_gen=None, is_legendary=None, is_mythic=None, base_evol
 
     return sql
 
-async def create_list(db, gen, filters):
+def create_list(db, gen, filters):
     suffix, is_legendary, is_mythic, base_form = filters
     set_name = f"Pokemon Gen {gen} {suffix}"
-    result = await db.create("pokemon_draft_set", {"name": set_name})
+    result = db.create("pokemon_draft_set", {"name": set_name})
     sub_sql = pokemon_select(gen, is_legendary, is_mythic, base_form)
-    if len(result) == 1:
+    if result:
         print(f"Creating Set: {set_name}")
-        await db.query(f"RELATE {result[0]['id']}->contains->({sub_sql})")
+        db.query(f"RELATE {result['id']}->contains->({sub_sql})")
     else:
-        print(f"Result was not a single item, but expected only 1: {result}")
+        print(f"There was an issue creating the draft list: {result}")
 
-async def create_pokemon_lists(db):
+def create_pokemon_lists(db):
     pokemon_ds_filters = [
         ("Full Roster", None, None, False),
         ("Base Only", None, None, True),
@@ -112,23 +115,23 @@ async def create_pokemon_lists(db):
 
     for f in pokemon_ds_filters:
         for gen in range(1,10):
-            await create_list(db, gen, f)
+            create_list(db, gen, f)
 
     for f in pokemon_ds_filters:
-        result = await db.create("pokemon_draft_set", {"name": f"Pokemon All Gens {f[0]}"})
+        result = db.create("pokemon_draft_set", {"name": f"Pokemon All Gens {f[0]}"})
         sub_sql = pokemon_select()
-        if len(result) == 1:
+        if result:
             print(f"Creating Set: Pokemon All Gens {f[0]}")
-            await db.query(f"RELATE {result[0]['id']}->contains->({sub_sql})")
+            db.query(f"RELATE {result['id']}->contains->({sub_sql})")
         else:
-            print(f"Result was not a single item, but expected only 1: {result}")
+            print(f"There was an issue creating the draft list: {result}")
 
     debug_sql = "SELECT id FROM pokemon WHERE dex_id < 10"
-    result = await db.create("pokemon_draft_set", {"name": "Debug Set"})
-    await db.query(f"RELATE {result[0]['id']}->contains->({debug_sql})")
+    result = db.create("pokemon_draft_set", {"name": "Debug Set"})
+    db.query(f"RELATE {result['id']}->contains->({debug_sql})")
 
-async def create_draft_rules(db):
-    await db.create("draft_rules", {
+def create_draft_rules(db):
+    db.create("draft_rules", {
         "name": "Showdown Snake",
         "picks_per_round": 1,
         "bans_per_round": 3,
@@ -137,7 +140,7 @@ async def create_draft_rules(db):
         "turn_type": "Snake"
     })
 
-    await db.create("draft_rules", {
+    db.create("draft_rules", {
         "name": "Showdown Round Robin",
         "picks_per_round": 1,
         "bans_per_round": 3,
@@ -146,7 +149,7 @@ async def create_draft_rules(db):
         "turn_type": "RoundRobin"
     })
 
-    await db.create("draft_rules", {
+    db.create("draft_rules", {
         "name": "Nuzlocke Snake",
         "picks_per_round": 1,
         "bans_per_round": 2,
@@ -155,7 +158,7 @@ async def create_draft_rules(db):
         "turn_type": "Snake"
     })
 
-    await db.create("draft_rules", {
+    db.create("draft_rules", {
         "name": "Nuzlocke Round Robin",
         "picks_per_round": 1,
         "bans_per_round": 2,
@@ -164,7 +167,7 @@ async def create_draft_rules(db):
         "turn_type": "RoundRobin"
     })
 
-    await db.create("draft_rules", {
+    db.create("draft_rules", {
         "name": "Intergration Test Snake",
         "picks_per_round": 1,
         "bans_per_round": 1,
@@ -173,7 +176,7 @@ async def create_draft_rules(db):
         "turn_type": "Snake"
     })
 
-    await db.create("draft_rules", {
+    db.create("draft_rules", {
         "name": "Intergration Test Snake Pick First",
         "picks_per_round": 1,
         "bans_per_round": 1,
@@ -182,7 +185,7 @@ async def create_draft_rules(db):
         "turn_type": "Snake"
     })
 
-    await db.create("draft_rules", {
+    db.create("draft_rules", {
         "name": "Intergration Test Round Robin",
         "picks_per_round": 1,
         "bans_per_round": 1,

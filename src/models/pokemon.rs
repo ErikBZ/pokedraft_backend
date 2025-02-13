@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use surrealdb::sql::Thing;
+use surrealdb::RecordId;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[warn(dead_code)]
@@ -26,10 +26,13 @@ pub enum PokemonType {
 }
 
 // probably a better way than to make these all public
+// TODO: Serializing theses fields looks a little gross in the frontend
+// I should implement the serialiers myself to make em nicer
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Pokemon {
-    pub dex_id: u16,
+    pub dex_id: u32,
+    pub id: Option<RecordId>,
     pub name: String,
     pub type1: PokemonType,
     pub type2: Option<PokemonType>,
@@ -39,12 +42,10 @@ pub struct Pokemon {
     pub is_mythic: bool,
 }
 
-// TODO: Option<Thing> is ugly, need to figure out a better way
-// to return this as json
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct PokemonDraftSet {
-    id: Option<Thing>,
+    id: Option<RecordId>,
     name: String,
     pokemon: Option<PokemonResponse>,
 }
