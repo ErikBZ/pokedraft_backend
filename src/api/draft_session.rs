@@ -1,7 +1,6 @@
 use crate::api::utils::{relate_objects, run_query};
 use crate::models::draft::{
-    DraftPhase, DraftRules, DraftSession, DraftSessionCreateForm, DraftState, DraftUser,
-    DraftUserForm, DraftUserReturnData,
+    DraftPhase, DraftRules, DraftSession, DraftSessionCreateForm, DraftState, DraftUser, DraftUserForm, DraftUserReturnData
 };
 use crate::models::pokemon::PokemonType;
 use crate::models::{hash_uuid, Record};
@@ -67,7 +66,7 @@ pub async fn create_draft_session(
             None => return None,
         },
         Err(e) => {
-            println!("{}", e);
+            println!("BLAGH: {}", e);
             return None;
         }
     };
@@ -77,7 +76,7 @@ pub async fn create_draft_session(
         Ok(Some(r)) => r,
         Ok(None) => return None,
         Err(e) => {
-            println!("{}", e);
+            println!("HELLO: {}", e);
             return None;
         }
     };

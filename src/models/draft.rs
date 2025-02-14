@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
-use surrealdb::RecordId;
+use serde::{ser::SerializeStruct, Deserialize, Serialize};
+use surrealdb::{sql::Id, RecordId};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 pub enum DraftState {
@@ -48,9 +48,40 @@ impl Default for DraftRules {
     }
 }
 
+
+#[derive(Debug, Deserialize)]
+pub struct SurrealId {
+    tb: String,
+    id: String,
+}
+
+impl Serialize for SurrealId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+    S: serde::Serializer {
+        let mut state = serializer.serialize_struct("id", 2)?;
+        state.serialize_field("tb", &self.tb)?;
+        state.serialize_field("id", &self.id)?;
+        state.end()
+    }
+}
+
+/*
+impl Deserialize for SurrealId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+    D: serde::Deserializer<'de> {
+        deserializer.des
+    }
+}
+*/
+
+
+
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub struct DraftSession {
-    pub id: Option<RecordId>,
+    pub id: Option<SurrealId>,
     name: String,
     pub min_num_players: u16,
     pub max_num_players: u16,
@@ -66,6 +97,10 @@ pub struct DraftSession {
     pub draft_state: DraftState,
     pub current_phase: DraftPhase,
 }
+
+// TODO: Impl Serialize
+
+// TODO: Impl Deserialize
 
 impl Default for DraftSession {
     fn default() -> DraftSession {
