@@ -404,10 +404,12 @@ def print_usage():
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    tests_to_run = set(args[0].split(','))
 
-    if len(tests_to_run) == 0:
+    if len(args) < 1:
         print_usage()
+        sys.exit()
+
+    tests_to_run = set(args[0].split(','))
 
     if 'all' in tests_to_run:
         run_all()
