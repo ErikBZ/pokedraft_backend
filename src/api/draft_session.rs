@@ -1,6 +1,6 @@
 use crate::api::utils::{relate_objects, run_query};
 use crate::models::draft::{
-    DraftPhase, DraftRules, DraftSession, DraftSessionCreateForm, DraftState, DraftUser, DraftUserForm, DraftUserReturnData
+    DraftPhase, DraftRules, DraftSession, DraftSessionCreateForm, DraftState, DraftUser, DraftUserForm, DraftUserReturnData, IdWrapper
 };
 use crate::models::pokemon::PokemonType;
 use crate::models::{hash_uuid, Record};
@@ -56,7 +56,7 @@ pub fn option_draft_session<'a>() -> &'a str {
 pub async fn create_draft_session(
     session_form: Json<DraftSessionCreateForm>,
     db: &State<Surreal<Client>>,
-) -> Option<Json<DraftSession>> {
+) -> Option<Json<IdWrapper<DraftSession>>> {
     // should you even do this?
     let session_form: DraftSessionCreateForm = session_form.0;
 
@@ -72,7 +72,7 @@ pub async fn create_draft_session(
     };
 
     let draft_session = DraftSession::from(session_form, rules);
-    let result: DraftSession = match db.create("draft_session").content(draft_session).await {
+    let mut result: DraftSession = match db.create("draft_session").content(draft_session).await {
         Ok(Some(r)) => r,
         Ok(None) => return None,
         Err(e) => {
@@ -81,8 +81,8 @@ pub async fn create_draft_session(
         }
     };
 
-
-    Some(Json(result))
+    result.id = None;
+    Some(Json(result.into()))
 }
 
 #[post(

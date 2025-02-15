@@ -76,12 +76,27 @@ impl Deserialize for SurrealId {
 }
 */
 
+#[derive(Debug, Serialize)]
+pub struct IdWrapper<T: Serialize> {
+    inner: T,
+    #[serde(flatten)]
+    surreal_id: String,
+}
 
+impl From<DraftSession> for IdWrapper<DraftSession> {
+    fn from(value: DraftSession) -> Self {
+        Self {
+            inner: value,
+            surreal_id: "".to_owned()
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub struct DraftSession {
-    pub id: Option<SurrealId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<RecordId>,
     name: String,
     pub min_num_players: u16,
     pub max_num_players: u16,
