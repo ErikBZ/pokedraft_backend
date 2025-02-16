@@ -1,6 +1,6 @@
 use crate::api::utils::{relate_objects, run_query};
 use crate::models::draft::{
-    DraftPhase, DraftRules, DraftSession, DraftSessionCreateForm, DraftState, DraftUser, DraftUserForm, DraftUserReturnData, IdWrapper
+    DraftPhase, DraftRules, DraftSession, DraftSessionCreateForm, DraftState, DraftUser, DraftUserForm, DraftUserReturnData
 };
 use crate::models::pokemon::PokemonType;
 use crate::models::{hash_uuid, Record};
@@ -56,7 +56,7 @@ pub fn option_draft_session<'a>() -> &'a str {
 pub async fn create_draft_session(
     session_form: Json<DraftSessionCreateForm>,
     db: &State<Surreal<Client>>,
-) -> Option<Json<IdWrapper<DraftSession>>> {
+) -> Option<Json<DraftSession>> {
     // should you even do this?
     let session_form: DraftSessionCreateForm = session_form.0;
 
@@ -72,7 +72,7 @@ pub async fn create_draft_session(
     };
 
     let draft_session = DraftSession::from(session_form, rules);
-    let mut result: DraftSession = match db.create("draft_session").content(draft_session).await {
+    let result: DraftSession = match db.create("draft_session").content(draft_session).await {
         Ok(Some(r)) => r,
         Ok(None) => return None,
         Err(e) => {
@@ -81,8 +81,7 @@ pub async fn create_draft_session(
         }
     };
 
-    result.id = None;
-    Some(Json(result.into()))
+    Some(Json(result))
 }
 
 #[post(
@@ -117,7 +116,7 @@ pub async fn toggle_ready(
         Some(p) => p,
         None => {
             return Err(NotFound(to_json_msg(
-                "Can't ready when the draft is in progress.",
+                "Can't ready when no players are in session",
             )))
         }
     };
@@ -135,7 +134,7 @@ pub async fn toggle_ready(
         Some(u) => u,
         None => {
             return Err(NotFound(to_json_msg(
-                "Can't ready when the draft is in progress.",
+                "Unable to get current player.",
             )))
         }
     };
@@ -292,6 +291,7 @@ pub async fn create_user(
     struct UpdateData {
         accepting_players: bool,
         draft_state: DraftState,
+        #[serde(skip_serializing_if = "Option::is_none")]
         current_player: Option<RecordId>,
     }
     let mut update_data = UpdateData {
@@ -300,6 +300,7 @@ pub async fn create_user(
         draft_state: DraftState::Open,
     };
 
+    // TODO: User ID doesn't need to be stringed like this. Clone here, thenn move at end
     let user_id = format!("{}", new_user_id);
     if session.num_of_players() == 0 {
         // TODO Ugh this looks awful
@@ -458,6 +459,8 @@ pub async fn select_pokemon<'a>(
 
 
 fn get_current_player(players: Vec<DraftUser>, id: &RecordId) -> Option<DraftUser> {
+    println!("Users: {:?}", players);
+    println!("RecordId: {:?}", id);
     for player in players {
         if let Some(ref t) = player.id {
             if t == id {

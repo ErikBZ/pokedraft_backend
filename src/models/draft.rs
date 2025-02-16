@@ -48,52 +48,7 @@ impl Default for DraftRules {
     }
 }
 
-
-#[derive(Debug, Deserialize)]
-pub struct SurrealId {
-    tb: String,
-    id: String,
-}
-
-impl Serialize for SurrealId {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-    S: serde::Serializer {
-        let mut state = serializer.serialize_struct("id", 2)?;
-        state.serialize_field("tb", &self.tb)?;
-        state.serialize_field("id", &self.id)?;
-        state.end()
-    }
-}
-
-/*
-impl Deserialize for SurrealId {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-    D: serde::Deserializer<'de> {
-        deserializer.des
-    }
-}
-*/
-
-#[derive(Debug, Serialize)]
-pub struct IdWrapper<T: Serialize> {
-    inner: T,
-    #[serde(flatten)]
-    surreal_id: String,
-}
-
-impl From<DraftSession> for IdWrapper<DraftSession> {
-    fn from(value: DraftSession) -> Self {
-        Self {
-            inner: value,
-            surreal_id: "".to_owned()
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type")]
 pub struct DraftSession {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<RecordId>,

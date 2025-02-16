@@ -14,6 +14,9 @@ def test(func):
 LOCAL_URL = "http://localhost:8080"
 API_URL = f"{LOCAL_URL}/api/v1"
 
+def get_id(data):
+    return data['id']['id']['String']
+
 def get_draft_obj_id(name, obj):
     draft_set_url = f"{API_URL}/draft_{obj}/"
     res = requests.get(draft_set_url)
@@ -21,7 +24,7 @@ def get_draft_obj_id(name, obj):
     y = [x for x in data if x["name"] == name]
 
     if len(y) != 0:
-        return y[0]["id"]["id"]["String"]
+        return get_id(y[0])
     else:
         return ""
 
@@ -118,7 +121,7 @@ def test_create_session_4_player_join_select_snake():
     if session == "":
         return
     else:
-        session = session['id']
+        session = get_id(session)
 
     players = []
 
@@ -140,6 +143,7 @@ def test_create_session_4_player_join_select_snake():
             "user_id": player['user_id']
         }
         res = requests.post(toggle_url, json=post_data)
+        print(res.json())
         assert res.status_code == 200
 
     res_data, status = player_ban_pokemon(session, players[0], DEBUG_POKEMON_SET[0])
@@ -218,7 +222,7 @@ def test_toggle_ready_on_pokemon():
     if session == "":
         return
     else:
-        session = session['id']
+        session = get_id(session)
 
     players = []
 
@@ -281,7 +285,7 @@ def test_full_game():
     if session == "":
         return
     else:
-        session = session['id']
+        session = get_id(session)
 
     players = []
 
@@ -345,7 +349,7 @@ def test_full_game_pick_first():
     if session == "":
         return
     else:
-        session = session['id']
+        session = get_id(session)
 
     players = []
 
