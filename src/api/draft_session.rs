@@ -350,7 +350,7 @@ pub async fn select_pokemon<'a>(
         None => return Err(NotFound("Session not found".into())),
     };
 
-    let draft_user_id = select_pokemon.user_id;
+    let draft_user_id = RecordId::from_table_key(DRAFT_USER_TB, select_pokemon.user_id);
 
     let key_hash = match Uuid::parse_str(&select_pokemon.secret) {
         Ok(k) => hash_uuid(&k),
@@ -462,7 +462,7 @@ fn get_current_player(players: Vec<DraftUser>, id: &RecordId) -> Option<DraftUse
 // structs
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SelectPokemonRequest {
-    user_id: RecordId,
+    user_id: String,
     pokemon_id: u32,
     action: DraftPhase,
     secret: String,
