@@ -94,7 +94,6 @@ pub async fn toggle_ready(
     user_form: Json<ReadyDraftUserForm>,
     db: &State<Surreal<Client>>,
 ) -> Result<String, NotFound<String>> {
-    let new_username = user_form.0.user_id;
     let query =
         format!("SELECT *,(SELECT * from ->{DRAFT_USER_RELATION}.out ORDER BY order_in_session ASC) as players FROM draft_session:{id};");
 
@@ -111,7 +110,7 @@ pub async fn toggle_ready(
     }
 
     // Get the user
-    let user_id = RecordId::from_table_key("draft_user", new_username);
+    let user_id = RecordId::from_table_key(DRAFT_USER_TB, user_form.0.user_id);
     let players = match session.players {
         Some(p) => p,
         None => {
@@ -175,14 +174,13 @@ pub async fn toggle_ready(
     Ok(to_json_msg("All good"))
 }
 
+// TODO: This can start at any time?
 #[post(
     "/draft_session/<id>/start",
-    format = "application/json",
-    data = "<user_form>"
+    format = "application/json"
 )]
 pub async fn start(
     id: &str,
-    user_form: Json<ReadyDraftUserForm>,
     db: &State<Surreal<Client>>,
 ) -> Result<String, NotFound<String>> {
     #[derive(Serialize)]
@@ -300,14 +298,11 @@ pub async fn create_user(
         draft_state: DraftState::Open,
     };
 
-    // TODO: User ID doesn't need to be stringed like this. Clone here, thenn move at end
-    let user_id = format!("{}", new_user_id);
     if session.num_of_players() == 0 {
-        // TODO Ugh this looks awful
-        update_data.current_player = Some(RecordId::from_table_key(DRAFT_USER_TB.to_owned(), user_id.clone()));
+        update_data.current_player = Some(new_user_id.clone());
     };
 
-    // TODO might need to do smarter casting of u16 to u32
+    // TODO: Make everything a u32
     if session.num_of_players() + 1 >= (session.max_num_players as u32) {
         update_data.accepting_players = false;
     };
@@ -321,12 +316,11 @@ pub async fn create_user(
     let return_data = DraftUserReturnData::new(
         new_username.clone(),
         id.into(),
-        user_id,
+        new_user_id,
         false,
         format!("{key}"),
     );
 
-    // Only Return Subset of Items
     Ok(Json(return_data))
 }
 
@@ -356,7 +350,7 @@ pub async fn select_pokemon<'a>(
         None => return Err(NotFound("Session not found".into())),
     };
 
-    let draft_user_id = RecordId::from_table_key(DRAFT_USER_TB.to_owned(), select_pokemon.user_id.clone());
+    let draft_user_id = select_pokemon.user_id;
 
     let key_hash = match Uuid::parse_str(&select_pokemon.secret) {
         Ok(k) => hash_uuid(&k),
@@ -380,10 +374,6 @@ pub async fn select_pokemon<'a>(
 
     // Get Next Player ID in session
     let (turn, next_player_id) = session.get_next_player_id();
-    let next_player_id = match next_player_id {
-        Some(s) => Some(RecordId::from_table_key(DRAFT_USER_TB.to_owned(), s)),
-        None => None
-    };
 
     // Get Next Phase in Session
     let next_phase = session.get_next_phase();
@@ -459,8 +449,6 @@ pub async fn select_pokemon<'a>(
 
 
 fn get_current_player(players: Vec<DraftUser>, id: &RecordId) -> Option<DraftUser> {
-    println!("Users: {:?}", players);
-    println!("RecordId: {:?}", id);
     for player in players {
         if let Some(ref t) = player.id {
             if t == id {
@@ -474,7 +462,7 @@ fn get_current_player(players: Vec<DraftUser>, id: &RecordId) -> Option<DraftUse
 // structs
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SelectPokemonRequest {
-    user_id: String,
+    user_id: RecordId,
     pokemon_id: u32,
     action: DraftPhase,
     secret: String,
