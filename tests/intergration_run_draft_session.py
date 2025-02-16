@@ -83,7 +83,7 @@ def create_player(session, player_name):
 def player_select_pokemon(session, player, pokemon, action="SELECT"):
     select_pokemon_url = f"{API_URL}/draft_session/{session}/select-pokemon"
     post_data = {
-        "user_id": player['user_id'],
+        "user_id": unwrap_id(player['user_id']),
         "pokemon_id": pokemon,
         "action": action,
         "secret": player['key'],
