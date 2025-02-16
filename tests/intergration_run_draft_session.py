@@ -14,6 +14,9 @@ def test(func):
 LOCAL_URL = "http://localhost:8080"
 API_URL = f"{LOCAL_URL}/api/v1"
 
+def unwrap_id(data):
+    return data['id']['String']
+
 def get_draft_obj_id(name, obj):
     draft_set_url = f"{API_URL}/draft_{obj}/"
     res = requests.get(draft_set_url)
@@ -21,7 +24,7 @@ def get_draft_obj_id(name, obj):
     y = [x for x in data if x["name"] == name]
 
     if len(y) != 0:
-        return y[0]["id"]["id"]["String"]
+        return unwrap_id(y[0]['id'])
     else:
         return ""
 
@@ -97,7 +100,7 @@ def player_pick_pokemon(session, player, pokemon):
 def toggle_user(session, player):
     toggle_url = f"{API_URL}/draft_session/{session}/ready"
     post_data = {
-        "user_id": player['user_id']
+        "user_id": unwrap_id(player['user_id'])
     }
     res = requests.post(toggle_url, json=post_data)
     return res.json(), res.status_code
@@ -105,7 +108,7 @@ def toggle_user(session, player):
 def start_session(session, player):
     toggle_url = f"{API_URL}/draft_session/{session}/start"
     post_data = {
-        "user_id": player['user_id']
+        "user_id": unwrap_id(player['user_id'])
     }
     res = requests.post(toggle_url, json=post_data)
     return res.json(), res.status_code
@@ -118,7 +121,7 @@ def test_create_session_4_player_join_select_snake():
     if session == "":
         return
     else:
-        session = session['id']
+        session = unwrap_id(session['id'])
 
     players = []
 
@@ -137,7 +140,7 @@ def test_create_session_4_player_join_select_snake():
     for player in players:
         toggle_url = f"{API_URL}/draft_session/{session}/ready"
         post_data = {
-            "user_id": player['user_id']
+            "user_id": unwrap_id(player['user_id'])
         }
         res = requests.post(toggle_url, json=post_data)
         assert res.status_code == 200
@@ -218,7 +221,7 @@ def test_toggle_ready_on_pokemon():
     if session == "":
         return
     else:
-        session = session['id']
+        session = unwrap_id(session['id'])
 
     players = []
 
@@ -281,7 +284,7 @@ def test_full_game():
     if session == "":
         return
     else:
-        session = session['id']
+        session = unwrap_id(session['id'])
 
     players = []
 
@@ -345,7 +348,7 @@ def test_full_game_pick_first():
     if session == "":
         return
     else:
-        session = session['id']
+        session = unwrap_id(session['id'])
 
     players = []
 

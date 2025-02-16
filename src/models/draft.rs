@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
-use surrealdb::RecordId;
+use serde::{ser::SerializeStruct, Deserialize, Serialize};
+use surrealdb::{sql::Id, RecordId};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 pub enum DraftState {
@@ -50,6 +50,7 @@ impl Default for DraftRules {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DraftSession {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<RecordId>,
     name: String,
     pub min_num_players: u16,
@@ -66,6 +67,10 @@ pub struct DraftSession {
     pub draft_state: DraftState,
     pub current_phase: DraftPhase,
 }
+
+// TODO: Impl Serialize
+
+// TODO: Impl Deserialize
 
 impl Default for DraftSession {
     fn default() -> DraftSession {
@@ -118,7 +123,7 @@ impl DraftSession {
         players_with_name.len() != 0
     }
 
-    pub fn get_next_player_id(&self) -> (u32, Option<String>) {
+    pub fn get_next_player_id(&self) -> (u32, Option<RecordId>) {
         if let Some(players) = &self.players {
             let num_of_players = players.len() as u32;
             let x = (self.turn_ticker + 1) % num_of_players;
@@ -131,9 +136,7 @@ impl DraftSession {
             } as usize;
 
             if let Some(player) = players.get(next_player_i) {
-                if let Some(t) = &player.id {
-                    return (self.turn_ticker + 1, Some(format!("{}", t)));
-                }
+                return (self.turn_ticker + 1, player.id.clone());
             }
         } 
 
@@ -298,7 +301,7 @@ impl DraftUser {
 pub struct DraftUserReturnData {
     name: String,
     session_id: String,
-    user_id: String,
+    user_id: RecordId,
     current_turn: bool,
     key: String,
 }
@@ -307,7 +310,7 @@ impl DraftUserReturnData {
     pub fn new(
         name: String,
         session_id: String,
-        user_id: String,
+        user_id: RecordId,
         current_turn: bool,
         key: String,
     ) -> DraftUserReturnData {
