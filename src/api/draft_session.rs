@@ -84,6 +84,12 @@ pub async fn create_draft_session(
     Some(Json(result))
 }
 
+#[options("/draft_session/<id>/ready")]
+pub fn option_toggle_ready<'a>(id: &'a str) -> &'a str {
+    let _ = id;
+    "Ok"
+}
+
 #[post(
     "/draft_session/<id>/ready",
     format = "application/json",
@@ -174,7 +180,12 @@ pub async fn toggle_ready(
     Ok(to_json_msg("All good"))
 }
 
-// TODO: This can start at any time?
+#[options("/draft_session/<id>/start")]
+pub fn option_start<'a>(id: &'a str) -> &'a str {
+    let _ = id;
+    "Ok"
+}
+
 #[post(
     "/draft_session/<id>/start",
     format = "application/json"
@@ -183,6 +194,15 @@ pub async fn start(
     id: &str,
     db: &State<Surreal<Client>>,
 ) -> Result<String, NotFound<String>> {
+    let session: DraftSession = match db.select(("draft_session", id)).await {
+        Ok(p) => p.unwrap(),
+        Err(_) => return Err(NotFound("Not Found".to_string())),
+    };
+
+    if session.draft_state != DraftState::Ready {
+        return Err(NotFound("Can only start draft once all players are ready".to_string()))
+    }
+
     #[derive(Serialize)]
     struct SessionUpdateData {
         draft_state: DraftState,
